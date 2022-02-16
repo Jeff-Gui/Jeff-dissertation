@@ -1,7 +1,8 @@
+library(logging)
 library(MatrixEQTL)
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
-                      min_sample_per_snp=5){
+                      min_sample_per_snp=0.01){
   # MAE: multiassay experiment object list, first object be gene expression and the second be MAF
   # Return Gene expression and SNP slicedData for eQTL mapping
   expression = assay(mae[[1]][,,'RNA', drop=FALSE])
@@ -23,8 +24,6 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   # genes: select specific gene list to use (Hugo symbol), if NULL, return all.
   # samples: tumour samples involved, if null will use all samples in maf.
   
-  # TODO: enfore filtering of VAF
-  MIN_SAMPLE_PER_SNP = min_sample_per_snp
   # TODO: classify snp as 0, 1, or 2.
   
   maf = as.data.frame(maf)
@@ -39,6 +38,10 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   } else {
     samples = unique(maf[[sample_col_name]])
   }
+  # TODO: enfore filtering of VAF
+  MIN_SAMPLE_PER_SNP = ceiling(min_sample_per_snp * length(samples))
+  loginfo('Using VAF cutoff %f, at least %d / %d samples.', min_sample_per_snp, MIN_SAMPLE_PER_SNP,
+          length(samples), logger = 'eQTL_QC')
   
   hgvsc = maf[,c('HGVSc','Chromosome','Start_Position')]
   hgvsc = hgvsc[!duplicated(hgvsc),]
@@ -67,6 +70,10 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   
   # Filter low-frequency SNPs
   rm_snps = names(which(rowSums(snp_m) < MIN_SAMPLE_PER_SNP))
+  loginfo('Filtering out %d / %d mutations. Remaining %d.', length(rm_snps), nrow(snp_m), 
+          nrow(snp_m) - length(rm_snps),
+          logger = 'eQTL_QC')
+  
   if (length(rm_snps) > 0){
     snp_m = snp_m[which(!rownames(snp_m) %in% rm_snps),]
     lookup = subset(lookup, !lookup$snpid %in% rm_snps)

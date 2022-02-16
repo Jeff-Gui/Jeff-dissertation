@@ -1,10 +1,12 @@
 library(MatrixEQTL)
 library(yaml)
-setwd('/Users/jefft/Desktop/p53_project/eQTL')
+library(logging)
+setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 source('utils.R')
 source('load_data_cbp.R')
 
 config_name = 'metabric.yaml'
+config_name = 'tcga_brca.yaml'
 
 ## Handle config
 default_cfg = yaml.load_file(file.path('config', 'default.yaml'))
@@ -26,6 +28,15 @@ if (is.null(eqtl_cfg$output_file_name_tra)){
 if (is.null(eqtl_cfg$output_file_name_cis)){
   eqtl_cfg$output_file_name_cis = tempfile()
 }
+if (!dir.exists(config$output)){
+  dir.create(config$output)
+}
+write_yaml(config, file.path(config$output, 'config.yaml'))
+
+
+basicConfig(level = 'FINEST')
+addHandler(writeToFile, file=file.path(config$output,'log.txt'), level='DEBUG')
+loginfo('Loading data...', logger = 'main')
 
 ## Load data
 dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
@@ -37,12 +48,11 @@ dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
                    gene_col_nm = dt_cfg$gene_col_nm)
 
 ## Quality control step
-### VAF
 
 ## Prepare eQTL data
 eqtl_m = get_eQTL_m(dt, genes = strsplit(eqtl_cfg$genes, split = ',')[[1]],
                     sample_col_name = eqtl_cfg$maf_sample_col_nm,
-                    min_sample_per_snp = 20)
+                    min_sample_per_snp = eqtl_cfg$min_vaf)
 snps = eqtl_m$snp
 gene = eqtl_m$gene
 snpspos = eqtl_m$snp_lookup
@@ -51,19 +61,24 @@ genepos = genepos[,c('geneid', 'chr', 'left', 'right')]
 
 ### Covariate
 # TODO Maybe tailored to the analysis
-cov_from_meta_col = c('ER_STATUS')
-meta = data.frame(dt[[1]]@colData)
-cvrt = matrix(0, nrow = length(cov_from_meta_col), ncol = nrow(meta))
-colnames(cvrt) = rownames(meta)
-rownames(cvrt) = cov_from_meta_col
-for (cl in cov_from_meta_col){
-  if (class(meta[,cl]) != 'numeric'){
-    cvrt[cl,] = as.numeric(as.factor(meta[,cl])) - 1
-  } else {
-    cvrt[cl,] = meta[,cl]
+if (is.null(eqtl_cfg$covariate_from_meta)){
+  cvrt = SlicedData$new()
+} else {
+  cov_from_meta_col = strsplit(eqtl_cfg$covariate_from_meta, split = ',')[[1]]
+  meta = data.frame(dt[[1]]@colData)
+  cvrt = matrix(0, nrow = length(cov_from_meta_col), ncol = nrow(meta))
+  colnames(cvrt) = rownames(meta)
+  rownames(cvrt) = cov_from_meta_col
+  for (cl in cov_from_meta_col){
+    if (class(meta[,cl]) != 'numeric'){
+      cvrt[cl,] = as.numeric(as.factor(meta[,cl])) - 1
+    } else {
+      cvrt[cl,] = meta[,cl]
+    }
   }
+  cvrt = SlicedData$new()$CreateFromMatrix(cvrt)
 }
-cvrt = SlicedData$new()$CreateFromMatrix(cvrt)
+
 
 #### Error covariance matrix
 #### Set to numeric() for identity.
@@ -74,12 +89,12 @@ me = Matrix_eQTL_main(
   snps = snps, 
   gene = gene, 
   cvrt = cvrt,
-  output_file_name = eqtl_cfg$output_file_name_tra,
+  output_file_name = file.path(config$output, eqtl_cfg$output_file_name_tra),
   pvOutputThreshold = as.numeric(eqtl_cfg$pvOutputThreshold_tra),
   useModel = useModel, 
   errorCovariance = errorCovariance, 
   verbose = TRUE, 
-  output_file_name.cis = eqtl_cfg$output_file_name_cis,
+  output_file_name.cis = file.path(config$output, eqtl_cfg$output_file_name_cis),
   pvOutputThreshold.cis = as.numeric(eqtl_cfg$pvOutputThreshold_cis),
   snpspos = snpspos, 
   genepos = genepos,
@@ -88,8 +103,10 @@ me = Matrix_eQTL_main(
   min.pv.by.genesnp = FALSE,
   noFDRsaveMemory = FALSE)
 
+trans_eqtls = me$trans$eqtls
 
-plot_df = get_single_eqtl_plot_dt('CHEK2', 'snp9', dt, 
-                                  as.matrix(snps), lookup = lookup)[[1]]
+plot_df = get_single_eqtl_plot_dt('CCNA2', 'snp7', dt, 
+                                  as.matrix(snps), lookup = eqtl_m[[3]])[[1]]
 ggplot(plot_df, aes(x=class, y=expression)) + theme_classic() +
-  geom_boxplot()
+  geom_violin() +
+  geom_jitter(width = 0.2, alpha=0.5)

@@ -1,3 +1,4 @@
+output: outputs/metabric
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/METABRIC/brca_metabric
     exp_nm: data_mrna_agilent_microarray.txt
@@ -5,3 +6,4 @@ dataset:
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg18_gene_table_autosome.tsv
+    covariate_from_meta: ER_STATUS

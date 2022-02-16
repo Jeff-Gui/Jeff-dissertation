@@ -1,3 +1,4 @@
+library(logging)
 library(tidyverse)
 library(maftools)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/maftools/inst/doc/maftools.html
@@ -23,6 +24,7 @@ clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
     rms = rowMeans(sub[,complete_cases_dot])
     remove_rows = c(remove_rows, rownames(sub)[which(rms < max(rms))])
   }
+  loginfo('Duplicated rows in matrix: %d', length(remove_rows))
   mtx = mtx[which(!rownames(mtx) %in% remove_rows),]
   remain_dup = which(duplicated(mtx[[gene_col_nm]]))
   if (length(remain_dup)>0){
@@ -46,11 +48,15 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   complete_cases = trimws(strsplit(complete_cases[nrow(complete_cases),2], '\t')[[1]])
   complete_cases_dot = gsub('-', '.', complete_cases)
   exps = read.table(file.path(dataset_home, exp_nm), sep='\t', header = T, na.strings = na.str)
+  loginfo('Expression matrix dim before cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
+  
   cnas = read.table(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
   muts = read.maf(file.path(dataset_home, mut_nm))
   sample_meta = read.table(file.path(dataset_home, sample_meta_nm), sep = '\t', comment.char = '#', header = T)
   
   exps = clean_matrix(exps, complete_cases_dot = complete_cases_dot, gene_col_nm = gene_col_nm)
+  loginfo('Expression matrix dim after cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
+  
   cnas = clean_matrix(cnas, complete_cases_dot = complete_cases_dot, gene_col_nm = gene_col_nm)
   co_genes = as.character(ordered(intersect(rownames(exps), rownames(cnas))))
   exps = exps[co_genes,]
@@ -63,6 +69,12 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   sample_meta = sample_meta[colnames(exps),]
   rownames(sample_meta) = gsub('\\.', '-', rownames(sample_meta))
   gc()
+  
+  g_s = muts@gene.summary
+  mm_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'Missense_Mutation'])
+  t_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'total'])
+  ms_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'MutatedSamples'])
+  loginfo('p53 mutation: %d missense out of %d mutations. %d mutated samples.', mm_n, t_n, ms_n, logger = 'data.loader')
   
   # construct multi-assay-experiment
   exprdat = SummarizedExperiment(exps)

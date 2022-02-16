@@ -1,3 +1,4 @@
+output: # output folder
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018
     case_complete_nm: cases_complete.txt
@@ -10,11 +11,13 @@ dataset:
     na.str: 
 
 eQTL:
-    output_file_name_tra: 
-    output_file_name_cis: 
+    min_vaf: 0.01
+    output_file_name_tra: trans_eqtl.txt
+    output_file_name_cis: cis_eqtl.txt
     maf_sample_col_nm: Tumor_Sample_Barcode # column name in MAF file referring the sample ID.
     genes: TP53  # which genes SNP located in should be considered, if blank, will consider all SNP. Comma separated.
     genepos: /  # gene location table specific to the version of genome assembly
+    covariate_from_meta: # covariate as columns in the metadata table, comma separated
     pvOutputThreshold: 5e-2
     pvOutputThreshold_cis: 5e-2
     pvOutputThreshold_tra: 5e-2
