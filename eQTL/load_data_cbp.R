@@ -1,6 +1,7 @@
 library(logging)
 library(tidyverse)
 library(maftools)
+library(limma)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/maftools/inst/doc/maftools.html
 library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
@@ -86,11 +87,28 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     sample_meta)
   
   a = ls()
+  flag = FALSE
+  if (('t_ref_count' %in% colnames(muts@data)) & ('t_alt_count' %in% colnames(muts@data))){
+    if (!anyNA(muts@data$t_ref_count)){
+      loginfo('Found t_ref_count and t_alt_count, calculating VAF.', logger = 'data.loader')
+      muts@data[['VAF']] = muts@data$t_alt_count / (muts@data$t_alt_count + muts@data$t_ref_count)
+      flag = TRUE
+    }
+  }
+  if (!flag){
+    loginfo('No VAF information in the MAF file.', logger = 'data.loader')
+  }
   rm(list=a[which(a != 'multiAssay' & a != 'muts')])
   return(list(multiAssay, muts))
 }
 
-integrate_dts = function(datasets){
+integrate_dts = function(datasets, z_score_norm=FALSE){
+  # z_score_norm: whether normalize RNA dataset with Z-score before merging
+  #   if length is one, will apply to all datasets
+  #   otherwise, each index match one dataset in the list
+  if (length(z_score_norm)==1){
+    z_score_norm = rep(z_score_norm, length(datasets))
+  }
   if (length(datasets)==1){
     return(datasets)
   }
@@ -113,9 +131,14 @@ integrate_dts = function(datasets){
       ct = ct + 1
     }
     merged_exp = data.frame(row.names = co_rnms)
+    count = 0
     for (dt in datasets){
+      count = count + 1
       dt_df = data.frame(dt@ExperimentList[[cep]]@assays@data)[co_rnms,]
       dt_df = dt_df[,-which(colnames(dt_df) %in% c('group', 'group_name'))]
+      if (z_score_norm[count]){
+        dt_df = t(scale(t(dt_df)))
+      }
       merged_exp = cbind(merged_exp, dt_df)
     }
     
@@ -131,6 +154,16 @@ integrate_dts = function(datasets){
   return(merged)
 }
 
+
+align_expression = function(merged_exp, sample_factor){
+  # sample_factor: group information of the sample in merged df
+  
+  # Step 1 use limma package
+  merged_exp = normalizeBetweenArrays(merged_exp)
+  
+}
+
+
 # brca.tcga = load_data_cbp(dataset_home = '/Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018')
 # 
 # brca.cptac = load_data_cbp(dataset_home = '/Users/jefft/Desktop/p53_project/datasets/BRCA-CPTAC/brca_cptac_2020/',
@@ -140,8 +173,19 @@ integrate_dts = function(datasets){
 # brca.metabric = load_data_cbp(dataset_home = '/Users/jefft/Desktop/p53_project/datasets/METABRIC/brca_metabric/',
 #                               exp_nm = 'data_mrna_agilent_microarray.txt', na.str = 'NA')
 # 
-# integrated = integrate_dts(list(brca.tcga[[1]], brca.cptac[[1]]))
-# # MAF can be converted to mae, but not summarizedexperiment. 
+# integrated = integrate_dts(list(brca.tcga[[1]], brca.cptac[[1]]), z_score_norm = T)
+# sample_factor = factor(c(rep(1, dim(brca.tcga[[1]]@colData)[1]), 
+#                          rep(2, dim(brca.cptac[[1]]@colData)[1])))
+# integrated$RNA = align_expression(integrated$RNA, sample_factor)
+# 
+# a = prcomp(integrated$RNA)
+# rot = a$rotation
+# df = data.frame('PC1'=rot[,'PC1'], 'PC2'=rot[,'PC2'])
+# df['dataset'] = F
+# df$dataset[which(grep('TCGA', rownames(df)))] = T
+# ggplot(df, aes(x=PC1,y=PC2)) + geom_point(aes(color=dataset))
+
+# MAF can be converted to mae, but not summarizedexperiment.
 
 
 #=========================== Try TCGABiolink?

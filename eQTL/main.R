@@ -7,6 +7,7 @@ source('load_data_cbp.R')
 
 config_name = 'metabric.yaml'
 config_name = 'tcga_brca.yaml'
+refresh_log = TRUE
 
 ## Handle config
 default_cfg = yaml.load_file(file.path('config', 'default.yaml'))
@@ -33,9 +34,12 @@ if (!dir.exists(config$output)){
 }
 write_yaml(config, file.path(config$output, 'config.yaml'))
 
-
+logpath = file.path(config$output, 'log.txt')
+if (file.exists(logpath) & refresh_log){
+  file.remove(logpath)
+}
 basicConfig(level = 'FINEST')
-addHandler(writeToFile, file=file.path(config$output,'log.txt'), level='DEBUG')
+addHandler(writeToFile, file=logpath, level='DEBUG')
 loginfo('Loading data...', logger = 'main')
 
 ## Load data
@@ -85,6 +89,7 @@ if (is.null(eqtl_cfg$covariate_from_meta)){
 errorCovariance = numeric()
 
 ## Run eQTL
+gc()
 me = Matrix_eQTL_main(
   snps = snps, 
   gene = gene, 
