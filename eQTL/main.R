@@ -5,9 +5,10 @@ setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 source('utils.R')
 source('load_data_cbp.R')
 
-config_name = 'metabric.yaml'
+# config_name = 'metabric.yaml'
 config_name = 'tcga_brca.yaml'
 refresh_log = TRUE
+use_cache = TRUE
 
 ## Handle config
 default_cfg = yaml.load_file(file.path('config', 'default.yaml'))
@@ -49,20 +50,25 @@ if (!is.null(preprocess_cfg$norm_gene)){
 }
 
 ## Load data
-dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
-                   exp_nm = dt_cfg$exp_nm, 
-                   cna_nm = dt_cfg$cna_nm, 
-                   mut_nm = dt_cfg$mut_nm,
-                   sample_meta_nm = dt_cfg$sample_meta_nm,
-                   patient_meta_nm = dt_cfg$patient_meta_nm,
-                   case_complete_nm = dt_cfg$case_complete_nm,
-                   case_list_dir_nm = dt_cfg$case_list_dir_nm,
-                   na.str = dt_cfg$na.str,
-                   gene_col_nm = dt_cfg$gene_col_nm,
-                   normalize_genes = preprocess_cfg$norm_gene,
-                   z_score = preprocess_cfg$z_score,
-                   has_log_ed = dt_cfg$has_log_ed)
-gc()
+if (!use_cache){
+  dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
+                     exp_nm = dt_cfg$exp_nm, 
+                     cna_nm = dt_cfg$cna_nm, 
+                     mut_nm = dt_cfg$mut_nm,
+                     sample_meta_nm = dt_cfg$sample_meta_nm,
+                     patient_meta_nm = dt_cfg$patient_meta_nm,
+                     case_complete_nm = dt_cfg$case_complete_nm,
+                     case_list_dir_nm = dt_cfg$case_list_dir_nm,
+                     na.str = dt_cfg$na.str,
+                     gene_col_nm = dt_cfg$gene_col_nm,
+                     normalize_genes = preprocess_cfg$norm_gene,
+                     z_score = preprocess_cfg$z_score,
+                     has_log_ed = dt_cfg$has_log_ed)
+  gc()
+} else {
+  load(file = file.path(dirname(dt_cfg$dataset_home), 'clean_data.RData'))
+}
+
 
 ## Quality control step
 
@@ -135,9 +141,26 @@ me = Matrix_eQTL_main(
 # Checking the results
 trans_eqtls = me$trans$eqtls
 trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
-get_var_info_from_maf(dt[[2]]@data, 'snp29', eqtl_m[[3]])
-plot_df = get_single_eqtl_plot_dt('PSAT1', 'snp29', dt, 
-                                  as.matrix(snps), lookup = eqtl_m[[3]])[[1]]
+snpids = unique(trans_eqtls$snps)
+snpp = c()
+for (i in snpids){
+  snpp = c(snpp, get_var_info_from_maf(dt[[2]]@data, i, eqtl_m[[3]]))
+}
+names(snpp) = snpids
+trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
+trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
+write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'), 
+            row.names = F, sep = '\t', quote = F)
+
+# Visualise the results
+snpid_to_plot = 'snp2'
+gene_to_plot = 'PSMC1'
+plot_rs = get_single_eqtl_plot_dt(gene_to_plot, snpid_to_plot, dt,
+                                  as.matrix(snps), lookup = eqtl_m[[3]])
+plot_df = plot_rs[[1]]
+plot_title = strsplit(get_var_info_from_maf(dt[[2]]@data, snpid_to_plot, eqtl_m[[3]]),
+                      split = '\\.')[[1]][2]
 ggplot(plot_df, aes(x=class, y=expression)) + theme_classic() +
   geom_violin() +
-  geom_jitter(width = 0.2, alpha=0.5)
+  geom_jitter(width = 0.2, alpha=0.5) +
+  labs(x=plot_title, title = strsplit(config_name, split='\\.')[[1]][1], y=gene_to_plot)

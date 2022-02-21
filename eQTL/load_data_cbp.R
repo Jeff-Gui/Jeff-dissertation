@@ -27,7 +27,7 @@ clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
     rms = rowMeans(sub[,complete_cases_dot])
     remove_rows = c(remove_rows, rownames(sub)[which(rms < max(rms))])
   }
-  loginfo('Duplicated rows in matrix: %d', length(remove_rows))
+  loginfo(logger = 'data.loader','Duplicated rows in matrix: %d', length(remove_rows))
   mtx = mtx[which(!rownames(mtx) %in% remove_rows),]
   remain_dup = which(duplicated(mtx[[gene_col_nm]]))
   if (length(remain_dup)>0){

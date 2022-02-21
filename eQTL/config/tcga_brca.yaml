@@ -5,4 +5,4 @@ dataset:
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
-    covariate_from_meta: ANEUPLOIDY_SCORE
+    covariate_from_meta: AGE,SEX
