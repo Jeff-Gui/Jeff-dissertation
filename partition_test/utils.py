@@ -7,6 +7,7 @@ Created on Fri Dec 17 15:05:24 2021
 """
 import numpy as np
 
+
 def rand_merge_group_layers(mtx):
     """Random merge M layers of groupping on N samples (N, M). Return (N, 1)
     """
@@ -43,8 +44,29 @@ def rand_merge_group_layers(mtx):
         if fn_group[i] == -1:
             fn_group[i] = gp_dic[tuple(mtx[i,:])]
     dics.update(gp_dic)
-    return fn_group, dics
+    dics = dict(zip(dics.values(), dics.keys()))
+    return relabel(fn_group, dics)
 
+
+def relabel(group, dic):
+    """Relabel grouping to remove empty groups
+    """
+    count = 0
+    ct = np.bincount(group)
+    new_dic = {}
+    old2new = {}
+    old_ids = np.unique(sorted(group))
+    
+    zeros = 0
+    for i in range(ct.shape[0]):
+        if ct[i] != 0:
+            old2new[old_ids[i-zeros]] = count
+            new_dic[count] = dic[old_ids[i-zeros]]
+            count += 1
+        else:
+            zeros += 1
+    new_group = np.array(list(map(lambda x:old2new[x], group)))
+    return new_group, new_dic
 
 
 class rand_part():

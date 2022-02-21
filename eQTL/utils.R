@@ -112,6 +112,11 @@ get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m, lookup=NULL){
   return(list('plot_df'=rna, 'var_name'=NULL))
 }
 
+get_var_info_from_maf = function(maf, snpid, lookup){
+  var_name = rownames(lookup)[which(lookup$snpid==snpid)]
+  maf = subset(maf, maf$HGVSc == var_name)
+  return(unique(maf$HGVSp_Short))
+}
 
 
 

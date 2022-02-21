@@ -1,6 +1,7 @@
 output: outputs/tcga_brca
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018
+    has_log_ed: FALSE
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv

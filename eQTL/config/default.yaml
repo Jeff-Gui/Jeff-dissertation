@@ -7,8 +7,14 @@ dataset:
     mut_nm: data_mutations.txt
     gene_col_nm: Hugo_Symbol
     sample_meta_nm: data_clinical_sample.txt
+    patient_meta_nm: data_clinical_patient.txt
     case_list_dir_nm: case_lists
+    has_log_ed: TRUE  # has expression data been log-transformed?
     na.str: 
+
+preprocess:
+    norm_gene: GAPDH,ACTB
+    z_score: FALSE
 
 eQTL:
     min_vaf: 0.01

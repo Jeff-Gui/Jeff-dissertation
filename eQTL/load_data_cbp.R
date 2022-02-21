@@ -2,6 +2,7 @@ library(logging)
 library(tidyverse)
 library(maftools)
 library(limma)
+library(data.table)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/maftools/inst/doc/maftools.html
 library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
@@ -14,6 +15,7 @@ library(MultiAssayExperiment)
 # mut_nm = 'data_mutations.txt'
 # gene_col_nm = 'Hugo_Symbol'
 # sample_meta_nm = 'data_clinical_sample.txt'
+# patient_meta_nm = 'data_clinical_patient.txt'
 
 clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   mtx = mtx[!is.na(mtx[gene_col_nm]),]
@@ -33,6 +35,10 @@ clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   }
   rownames(mtx) = mtx[[gene_col_nm]]
   mtx = mtx[,complete_cases_dot]
+  
+  ## NA removal (?)
+  mtx = na.omit(mtx)
+  
   return(mtx)
 }
 
@@ -42,40 +48,77 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
                          mut_nm = 'data_mutations.txt',
                          gene_col_nm = 'Hugo_Symbol',
                          sample_meta_nm = 'data_clinical_sample.txt',
+                         patient_meta_nm = 'data_clinical_patient.txt',
                          case_list_dir_nm = 'case_lists',
-                         na.str = ''){
+                         na.str = '',
+                         normalize_genes = NULL,
+                         z_score = FALSE,
+                         has_log_ed = TRUE){
   
+  patient_id_col_nm = 'PATIENT_ID'
   complete_cases = read.table(file.path(dataset_home, case_list_dir_nm, case_complete_nm), sep=':')
   complete_cases = trimws(strsplit(complete_cases[nrow(complete_cases),2], '\t')[[1]])
-  complete_cases_dot = gsub('-', '.', complete_cases)
-  exps = read.table(file.path(dataset_home, exp_nm), sep='\t', header = T, na.strings = na.str)
-  loginfo('Expression matrix dim before cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
   
-  cnas = read.table(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
+  exps = fread(file.path(dataset_home, exp_nm), sep='\t', header = T, na.strings = na.str)
+  exps = as.data.frame(exps)
+  loginfo(logger ='data.loader', 
+          'Expression matrix dim before cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
+  
+  cnas = fread(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
+  cnas = as.data.frame(cnas)
   muts = read.maf(file.path(dataset_home, mut_nm))
   sample_meta = read.table(file.path(dataset_home, sample_meta_nm), sep = '\t', comment.char = '#', header = T)
+  patient_meta = read.table(file.path(dataset_home, patient_meta_nm), sep = '\t', comment.char = '#', header = T)
+  sample_meta = left_join(sample_meta, patient_meta, by = patient_id_col_nm)
   
-  exps = clean_matrix(exps, complete_cases_dot = complete_cases_dot, gene_col_nm = gene_col_nm)
-  loginfo('Expression matrix dim after cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
-  
-  cnas = clean_matrix(cnas, complete_cases_dot = complete_cases_dot, gene_col_nm = gene_col_nm)
+  exps = clean_matrix(exps, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
+  cnas = clean_matrix(cnas, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
   co_genes = as.character(ordered(intersect(rownames(exps), rownames(cnas))))
   exps = exps[co_genes,]
   cnas = cnas[co_genes,]
+  loginfo(logger = 'data.loader',
+          'Expression matrix dim after cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
+  
+  # log2(x+1) if has not been log transformed. NA must has been addressed in above cleaning step.
+  # normalize expression data with house-keeping genes
+  # followed with z-score normalization
+  
+  LOG_TRANS = has_log_ed
+  if (!LOG_TRANS){
+    loginfo('Log2 transforming expression data...', logger = 'data.loader')
+    exps = log2(exps + 1)
+  }
+  
+  if (!is.null(normalize_genes)){
+    normalize_genes = normalize_genes[which(normalize_genes %in% rownames(exps))]
+    if (length(normalize_genes)==0){
+      loginfo('No normalize gene record!', logger = 'data.loader')
+    } else {
+      loginfo(logger = 'data.loader', 'Normalize gene expression with %s.', normalize_genes)
+      # because has log transformed
+      cm = log2(colMeans(2**exps[normalize_genes,]))
+      for (j in 1:ncol(exps)){
+        exps[,j] = exps[,j] - cm[j]
+      }
+    }
+  }
+  if (z_score){
+    loginfo('Z-scaling data...', logger = 'data.loader')
+    exps = t(scale(t(exps)))
+    exps = as.data.frame(exps)
+  }
+  
   muts = subsetMaf(muts, tsb=complete_cases, genes = co_genes)
   sample_meta = subset(sample_meta, sample_meta$SAMPLE_ID %in% complete_cases)
   rownames(sample_meta) = sample_meta$SAMPLE_ID
   sample_meta = sample_meta[,-which(colnames(sample_meta)=='SAMPLE_ID')]
-  rownames(sample_meta) = gsub('-', '.', rownames(sample_meta))
   sample_meta = sample_meta[colnames(exps),]
-  rownames(sample_meta) = gsub('\\.', '-', rownames(sample_meta))
-  gc()
   
   g_s = muts@gene.summary
   mm_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'Missense_Mutation'])
   t_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'total'])
   ms_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'MutatedSamples'])
-  loginfo('p53 mutation: %d missense out of %d mutations. %d mutated samples.', mm_n, t_n, ms_n, logger = 'data.loader')
+  loginfo(logger = 'data.loader', 'p53 mutation: %d missense out of %d mutations. %d mutated samples.', mm_n, t_n, ms_n)
   
   # construct multi-assay-experiment
   exprdat = SummarizedExperiment(exps)
@@ -86,7 +129,6 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     list('RNA'=exprdat, 'CNA'=cnadat),
     sample_meta)
   
-  a = ls()
   flag = FALSE
   if (('t_ref_count' %in% colnames(muts@data)) & ('t_alt_count' %in% colnames(muts@data))){
     if (!anyNA(muts@data$t_ref_count)){
@@ -98,6 +140,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   if (!flag){
     loginfo('No VAF information in the MAF file.', logger = 'data.loader')
   }
+  a = ls()
   rm(list=a[which(a != 'multiAssay' & a != 'muts')])
   return(list(multiAssay, muts))
 }
@@ -150,7 +193,6 @@ integrate_dts = function(datasets, z_score_norm=FALSE){
   
   a = ls()
   rm(list=a[which(a != 'merged')])
-  gc()
   return(merged)
 }
 

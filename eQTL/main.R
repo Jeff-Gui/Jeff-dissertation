@@ -38,20 +38,34 @@ logpath = file.path(config$output, 'log.txt')
 if (file.exists(logpath) & refresh_log){
   file.remove(logpath)
 }
+
 basicConfig(level = 'FINEST')
 addHandler(writeToFile, file=logpath, level='DEBUG')
 loginfo('Loading data...', logger = 'main')
 
+preprocess_cfg = config$preprocess
+if (!is.null(preprocess_cfg$norm_gene)){
+  preprocess_cfg$norm_gene = strsplit(preprocess_cfg$norm_gene, split = ',')[[1]]
+}
+
 ## Load data
 dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
-                   exp_nm = dt_cfg$exp_nm, cna_nm = dt_cfg$cna_nm, mut_nm = dt_cfg$mut_nm,
+                   exp_nm = dt_cfg$exp_nm, 
+                   cna_nm = dt_cfg$cna_nm, 
+                   mut_nm = dt_cfg$mut_nm,
                    sample_meta_nm = dt_cfg$sample_meta_nm,
+                   patient_meta_nm = dt_cfg$patient_meta_nm,
                    case_complete_nm = dt_cfg$case_complete_nm,
                    case_list_dir_nm = dt_cfg$case_list_dir_nm,
                    na.str = dt_cfg$na.str,
-                   gene_col_nm = dt_cfg$gene_col_nm)
+                   gene_col_nm = dt_cfg$gene_col_nm,
+                   normalize_genes = preprocess_cfg$norm_gene,
+                   z_score = preprocess_cfg$z_score,
+                   has_log_ed = dt_cfg$has_log_ed)
+gc()
 
 ## Quality control step
+
 
 ## Prepare eQTL data
 eqtl_m = get_eQTL_m(dt, genes = strsplit(eqtl_cfg$genes, split = ',')[[1]],
@@ -79,6 +93,16 @@ if (is.null(eqtl_cfg$covariate_from_meta)){
     } else {
       cvrt[cl,] = meta[,cl]
     }
+  }
+  remove_cov = c()
+  for (i in 1:nrow(cvrt)){
+    if (length(unique(cvrt[i,]))==1){
+      remove_cov = c(remove_cov, i)
+      loginfo(logger = 'main', 'Covariate %s is not varying in the dataset.', rownames(cvrt)[i])
+    }
+  }
+  if (length(remove_cov) > 0){
+    cvrt = cvrt[-remove_cov,]
   }
   cvrt = SlicedData$new()$CreateFromMatrix(cvrt)
 }
@@ -108,9 +132,11 @@ me = Matrix_eQTL_main(
   min.pv.by.genesnp = FALSE,
   noFDRsaveMemory = FALSE)
 
+# Checking the results
 trans_eqtls = me$trans$eqtls
-
-plot_df = get_single_eqtl_plot_dt('CCNA2', 'snp7', dt, 
+trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
+get_var_info_from_maf(dt[[2]]@data, 'snp29', eqtl_m[[3]])
+plot_df = get_single_eqtl_plot_dt('PSAT1', 'snp29', dt, 
                                   as.matrix(snps), lookup = eqtl_m[[3]])[[1]]
 ggplot(plot_df, aes(x=class, y=expression)) + theme_classic() +
   geom_violin() +

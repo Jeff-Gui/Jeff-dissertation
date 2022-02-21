@@ -1,0 +1,150 @@
+---
+title: "METABRIC_overview"
+author: "Jeff"
+date: "2/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(yaml)
+library(logging)
+library(RColorBrewer)
+source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+```
+
+## METABRIC dataset overview
+
+METABRIC is a breast cancer dataset containing 1904 __complete__ cases.
+
+Expression profiling was based on microarray. Log2 transformed intensity.
+
+ - Pre-processing step in METABRIC manuscript: outlier removal; probe quality control; normalisation in ER-positive/negative groups separately; limma batch removal.
+
+ - Other available expression profiling file: z-score relative to diploid sample distribution; z-score relative to all sample distribution.
+
+Genotyping was based on targeted sequencing.
+
+
+```{r load data, echo=FALSE, message=FALSE}
+setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
+source('utils.R')
+source('load_data_cbp.R')
+config_name = 'metabric.yaml'
+
+from_cache = TRUE
+
+## Handle config
+default_cfg = yaml.load_file(file.path('config', 'default.yaml'))
+if (config_name != 'dafault.yaml'){
+  config = yaml.load_file(file.path('config', config_name))
+  config = merge_cfg(default_cfg, config)
+}
+dt_cfg = config$dataset
+if (is.null(dt_cfg$na.str)){
+  dt_cfg$na.str = ''
+}
+loginfo('Loading data...', logger = 'main')
+
+## Load data
+if (!from_cache){
+  dt = load_data_cbp(dataset_home = dt_cfg$dataset_home,
+                   exp_nm = dt_cfg$exp_nm, 
+                   cna_nm = dt_cfg$cna_nm, mut_nm = dt_cfg$mut_nm,
+                   sample_meta_nm = dt_cfg$sample_meta_nm,
+                   case_complete_nm = dt_cfg$case_complete_nm,
+                   case_list_dir_nm = dt_cfg$case_list_dir_nm,
+                   na.str = dt_cfg$na.str,
+                   gene_col_nm = dt_cfg$gene_col_nm)
+  save(dt, file = file.path(dirname(dt_cfg$dataset_home), 'clean_data.RData'))
+} else {
+  load(file = file.path(dirname(dt_cfg$dataset_home), 'clean_data.RData')) 
+}
+```
+
+## Dimension reduciton plot
+
+Simple PCA. 
+
+```{r PCA, echo=FALSE}
+# Pick top 2,000 variable genes?
+rna = assay(dt[[1]][,,'RNA'])
+var_per_gene = rowSds(as.matrix(rna))
+rna = rna[rownames(rna)[order(var_per_gene, decreasing = T)[1:2000]],]
+
+library(FactoMineR)
+library(factoextra)
+pca.res = PCA(rna, ncp=20, graph = F)
+var = get_pca_var(pca.res)
+fviz_eig(pca.res, addlabels = T)
+```
+
+```{r Surface phenotype, echo=FALSE}
+df = data.frame('PC1'=var$coord[,1], 'PC2'=var$coord[,2])
+meta = data.frame(dt[[1]]@colData)
+df = cbind(df, meta)
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.7, aes(color=as.factor(ER_STATUS))) +
+  scale_color_manual(name='ER Status', values = c('royalblue', 'coral', 'darkgreen')) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)') +
+  mytme
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.7, aes(color=as.factor(PR_STATUS))) +
+  scale_color_manual(name='PR Status', values = c('royalblue', 'coral', 'darkgreen')) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)') +
+  mytme
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.7, aes(color=as.factor(HER2_STATUS))) +
+  scale_color_manual(name='HER2 Status', values = c('royalblue', 'coral', 'darkgreen')) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)') +
+  mytme
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.7, aes(color=as.factor(TUMOR_STAGE))) +
+  scale_color_manual(name='Tumour stage', 
+                     values = c('royalblue', 'coral', 'darkgreen', 'violet', 'gold')) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)') +
+  mytme
+```
+
+```{r p53 state, echo=FALSE}
+## Annotate per sample
+maf = dt[[2]]@data
+maf_p53 = subset(maf, maf$Hugo_Symbol=='TP53')
+maf_p53$Variant_Classification = as.character(maf_p53$Consequence)
+df['p53_state'] = 'wild-type'
+df['position'] = NA
+for (i in 1:nrow(df)){
+  nm = rownames(df)[i]
+  maf_sub = subset(maf_p53, maf_p53$Tumor_Sample_Barcode == nm)
+  if (nrow(maf_sub)==2){
+    df[i, 'p53_state'] = 'multiple'
+    next
+  }
+  if (nrow(maf_sub)==1){
+    if (maf_sub$Consequence[1] %in% c('missense_variant', 'frameshift_variant', 'stop_gained')){
+      df[i, 'p53_state'] = maf_sub$Consequence[1]
+    } else {
+      df[i, 'p53_state'] = 'others'
+    }
+    # c(175, 273, 248, 245, 249, 282)
+    if (maf_sub$Protein_position %in% c(175, 273, 248, 245, 249, 282)){
+      df[i, 'position'] = maf_sub$Protein_position[1]
+    }
+  }
+}
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.7, aes(color=p53_state)) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)')
+
+ggplot(df, aes(x=PC1, y=PC2)) + theme_classic() +
+  geom_point(size=1, alpha=0.5, color='gray', data = subset(df, is.na(df$position))) +
+  geom_point(size=1, alpha=1, aes(color=as.factor(position)), 
+             data = subset(df, !is.na(df$position))) +
+  labs(x='PC1 (91% variance)', y='PC2 (1% variance)')
+
+```
