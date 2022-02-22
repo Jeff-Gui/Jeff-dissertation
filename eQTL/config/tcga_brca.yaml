@@ -1,8 +1,17 @@
 output: outputs/tcga_brca
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018
-    has_log_ed: FALSE
+    has_log_ed: TRUE
+    exp_nm: data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt
+    na.str: NA
+
+preprocess:
+#    norm_gene: GAPDH,ACTB
+    quantile: FALSE  # TCGA data has already been batch-corrected, but a quantile norm can be followed by house-keeping gene norm. 
+    z_score: FALSE
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
-    covariate_from_meta: AGE,SEX
+    covariate_from_meta: AGE
+    meta_mut: /Users/jefft/Desktop/p53_project/datasets/meta_muts/breast_COSMIC.txt
+

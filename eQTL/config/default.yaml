@@ -13,7 +13,8 @@ dataset:
     na.str: 
 
 preprocess:
-    norm_gene: GAPDH,ACTB
+    norm_gene:
+    quantile: TRUE
     z_score: FALSE
 
 eQTL:
@@ -29,3 +30,4 @@ eQTL:
     pvOutputThreshold_tra: 5e-2
     cisDist: 1e6
     model: LINEAR
+    meta_mut: /  # a tsv file storng meta-mutant information.

@@ -2,14 +2,15 @@ library(logging)
 library(MatrixEQTL)
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
-                      min_sample_per_snp=0.01){
+                      min_sample_per_snp=0.01, meta_mut_fp=NULL){
   # MAE: multiassay experiment object list, first object be gene expression and the second be MAF
   # Return Gene expression and SNP slicedData for eQTL mapping
   expression = assay(mae[[1]][,,'RNA', drop=FALSE])
   
   rs = get_SNP_m_from_maf(mae[[2]]@data, genes=genes, samples=colnames(expression),
                           sample_col_name = sample_col_name,
-                          min_sample_per_snp = min_sample_per_snp)
+                          min_sample_per_snp = min_sample_per_snp,
+                          meta_mut_fp = meta_mut_fp)
   gene = SlicedData$new()
   snp = SlicedData$new()
   snp = snp$CreateFromMatrix(rs[[2]])
@@ -19,12 +20,17 @@ get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
 
 get_SNP_m_from_maf = function(maf, sample_col_name,
                               genes=NULL, samples=NULL,
-                              min_sample_per_snp=5){
+                              min_sample_per_snp=5,
+                              meta_mut_fp=NULL){
   # Get SNP matrix from MAF, also return SNP association table
   # genes: select specific gene list to use (Hugo symbol), if NULL, return all.
   # samples: tumour samples involved, if null will use all samples in maf.
   
   # TODO: classify snp as 0, 1, or 2.
+  
+  if (!is.null(meta_mut_fp)){
+    meta_mut = read.table(meta_mut_fp, sep='\t', header = T)
+  }
   
   maf = as.data.frame(maf)
   sample_col_id = which(colnames(maf) == sample_col_name)
@@ -67,6 +73,21 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   rownames(lookup) = lookup$HGVSc
   lookup = lookup[,-1]
   lookup = lookup[,c(3,1,2)]
+  
+  # Resolve meta mutations
+  mean_pos_snp = ceiling(mean(lookup$pos))
+  if (!is.null(meta_mut_fp)){
+    for (id in unique(meta_mut$meta_mut_id)){
+      aa_pos = meta_mut$aa_pos[which(meta_mut$meta_mut_id==id)]
+      maf_sub_meta_mut = subset(maf, maf$Protein_position %in% aa_pos)
+      snp_m = rbind(snp_m, rep(0,ncol(snp_m)))
+      rownames(snp_m)[nrow(snp_m)] = id
+      snp_m[id, maf_sub_meta_mut[[sample_col_name]]] = 1
+      lookup = rbind(lookup, c(id, 'chr17', mean_pos_snp))
+      rownames(lookup)[nrow(lookup)] = id
+    }
+  }
+  lookup$pos = as.numeric(lookup$pos)
   
   # Filter low-frequency SNPs
   rm_snps = names(which(rowSums(snp_m) < MIN_SAMPLE_PER_SNP))

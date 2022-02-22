@@ -1,9 +1,15 @@
-output: outputs/metabric
+output: outputs/metabric_mut_group
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/METABRIC/brca_metabric
     exp_nm: data_mrna_agilent_microarray.txt
     na.str: NA
 
+preprocess:
+    norm_gene: GAPDH,ACTB
+    quantile: TRUE
+    z_score: FALSE
+
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg18_gene_table_autosome.tsv
     covariate_from_meta: ER_STATUS,PR_STATUS,AGE_AT_DIAGNOSIS,SEX
+    meta_mut: /Users/jefft/Desktop/p53_project/datasets/meta_muts/breast_COSMIC.txt
