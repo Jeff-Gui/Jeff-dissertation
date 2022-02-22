@@ -31,9 +31,9 @@ factory = {'svm' : (SVC(kernel = 'rbf',
            
            'for' : (RandomForestClassifier(
                                            class_weight = 'balanced',
-                                           n_estimators = 5000),
+                                           n_estimators = 1000),
                
-                    {'min_samples_leaf' : [1,2,3,4,6,8,10,15]}),
+                    {'min_samples_leaf' : [6,8,10,15]}),
            
            'log' : (LogisticRegression(solver = 'liblinear', 
                                        penalty = 'l2', 
@@ -48,7 +48,7 @@ for nm in list(factory.keys()):
     print(nm)
     model = factory[nm][0]
     parameters = factory[nm][1]
-    clf = GridSearchCV(model, parameters, cv=CV_ROUND)
+    clf = GridSearchCV(model, parameters, cv=CV_ROUND, n_jobs=4, verbose=4)
     scores = cross_val_score(clf, X, y, cv=CV_ROUND, scoring='roc_auc')
     result[nm] = scores
     
