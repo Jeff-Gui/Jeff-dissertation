@@ -19,6 +19,12 @@ df = subset(df, df$PRIMARY_HISTOLOGY == 'carcinoma')
 # only consider missense ?
 df = subset(df, df$MUTATION_DESCRIPTION == 'Substitution - Missense')
 
+df$PRIMARY_SITE = gsub('large_intestine', 'colon', df$PRIMARY_SITE)
+df$PRIMARY_SITE = gsub('small_intestine', 'colon', df$PRIMARY_SITE)
+cancer_to_analyze = c('breast', 'lung', 'stomach', 'liver', 'prostate', 
+                      'ovary', 'colon', 'oesophagus', 'pancreas')
+df = subset(df, df$PRIMARY_SITE %in% cancer_to_analyze)
+
 # If only consider missense, use amino acid position to merge mutations
 df['aa_pos'] = as.character(str_extract(df$MUTATION_AA,"(?<=[A-Z])[0-9]+(?=[A-Z])"))
 freq_tb = table(df$aa_pos)
@@ -58,13 +64,8 @@ compare_freq = function(gt_freq, tissue_freq){
   return(rt)
 }
 
-df$PRIMARY_SITE = gsub('large_intestine', 'colon', df$PRIMARY_SITE)
-df$PRIMARY_SITE = gsub('small_intestine', 'colon', df$PRIMARY_SITE)
-
 comp_pan_cancer = data.frame()
-for (site in c('breast', 'lung', 'stomach', 'liver', 'prostate', 
-               'ovary', 'colon', 'oesophagus', 'pancreas',
-               'thyroid', 'kidney')){
+for (site in cancer_to_analyze){
   freq_tissue = get_tissue_freq(df, cancer_site = site, group_by = 'aa_pos')
   #head(freq_tissue)
   comp = compare_freq(freq, freq_tissue)
@@ -75,14 +76,18 @@ for (site in c('breast', 'lung', 'stomach', 'liver', 'prostate',
 }
 write.table(comp_pan_cancer, '/Users/jefft/Desktop/p53_project/datasets/COSMIC/tissue_p53_mut_freq.txt', 
             sep='\t', quote=F, row.names = F)
-breast_comp = subset(comp_pan_cancer, comp_pan_cancer$site=='breast')
+comp_pan_cancer = read.table('/Users/jefft/Desktop/p53_project/datasets/COSMIC/tissue_p53_mut_freq.txt', 
+                             sep='\t', header = T)
+
+site_to_write = 'lung'
+breast_comp = subset(comp_pan_cancer, comp_pan_cancer$site==site_to_write)
 breast_comp['hot-spot'] = breast_comp$aa_pos %in% names(freq)[1:6]
-breast_comp['tissue_high'] = breast_comp$Tissue_VS_Pan > 1.5
+breast_comp['tissue_high'] = breast_comp$Tissue_VS_Pan > 1.5 & breast_comp$Tissue_specific > 0.01
 hot_meta_mut = breast_comp$aa_pos[which(breast_comp$`hot-spot`)]
 tissue_meta_mut = breast_comp$aa_pos[which(breast_comp$tissue_high)]
 id = c(rep('hot_spot', length(hot_meta_mut)), rep('tissue_high', length(tissue_meta_mut)))
 meta_muts = data.frame('meta_mut_id'=id, 'aa_pos'=c(hot_meta_mut, tissue_meta_mut))
-write.table(meta_muts, '/Users/jefft/Desktop/p53_project/datasets/meta_muts/breast_COSMIC.txt',
+write.table(meta_muts, '/Users/jefft/Desktop/p53_project/datasets/meta_muts/lung_COSMIC.txt',
             sep='\t', quote=F, row.names = F)
 
 library(ggplot2)
@@ -96,8 +101,9 @@ ggplot(comp_pan_cancer,
        aes(x=Pan_cancer, y=Tissue_specific)) + theme_classic() +
   geom_point(alpha=0.5) +
   geom_abline(slope=1, intercept = 0) +
-  geom_abline(slope=2, linetype='dotted') +
-  geom_abline(slope=1/2, linetype='dotted') +
+  geom_abline(slope=1.5, linetype='dotted') +
+  geom_abline(slope=1/1.5, linetype='dotted') +
+  geom_vline(xintercept = 0.01, linetype='dotted') +
   geom_text(data = subset(comp_pan_cancer, label), aes(label=aa_pos), size=3, nudge_x = 0.005, nudge_y = 0.005) +
   facet_wrap(~site, scales = 'free')
 ggplotly()

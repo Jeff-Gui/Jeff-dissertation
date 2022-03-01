@@ -1,5 +1,7 @@
 library(logging)
 library(MatrixEQTL)
+library(maftools)
+library(tidyverse)
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
                       min_sample_per_snp=0.01, meta_mut_fp=NULL){
@@ -28,8 +30,16 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   
   # TODO: classify snp as 0, 1, or 2.
   
+  meta_mut = data.frame()
   if (!is.null(meta_mut_fp)){
-    meta_mut = read.table(meta_mut_fp, sep='\t', header = T)
+    for (fp in meta_mut_fp){
+      meta_mut_sub = read.table(fp, sep='\t', header = T) 
+      meta_mut = rbind(meta_mut, meta_mut_sub)
+    }
+    colnames(meta_mut) = c('meta_mut_id', 'aa_pos')
+  }
+  if (sum(duplicated(meta_mut))>0){
+    meta_mut = meta_mut[-duplicated(meta_mut),] 
   }
   
   maf = as.data.frame(maf)
@@ -46,7 +56,7 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   }
   # TODO: enfore filtering of VAF
   MIN_SAMPLE_PER_SNP = ceiling(min_sample_per_snp * length(samples))
-  loginfo('Using VAF cutoff %f, at least %d / %d samples.', min_sample_per_snp, MIN_SAMPLE_PER_SNP,
+  loginfo('Using VAF cutoff %f, at least %d / %d samples', min_sample_per_snp, MIN_SAMPLE_PER_SNP,
           length(samples), logger = 'eQTL_QC')
   
   hgvsc = maf[,c('HGVSc','Chromosome','Start_Position')]
@@ -62,12 +72,21 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   colnames(snp_m) = samples
   rownames(snp_m) = lookup_vector
   
+  has_vaf = 'VAF' %in% colnames(maf)
   for (i in 1:length(lookup_vector)){
     nm = names(lookup_vector)[i]
     sp_idx = which(maf$HGVSc == nm)
     sp_name = maf[sp_idx, sample_col_id]
-    for (sp in sp_name){
-      snp_m[lookup_vector[nm], sp] = 1
+    # if (i %% 1000 == 0){
+    #  print(i)
+    #}
+    for (sp in 1:length(sp_name)){
+      if (!has_vaf){
+        # If no VAF information, assume pure
+        snp_m[lookup_vector[nm], sp_name[sp]] = 1
+      } else {
+        snp_m[lookup_vector[nm], sp_name[sp]] = maf[sp_idx[sp], 'VAF']
+      }
     }
   }
   rownames(lookup) = lookup$HGVSc
@@ -82,7 +101,15 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
       maf_sub_meta_mut = subset(maf, maf$Protein_position %in% aa_pos)
       snp_m = rbind(snp_m, rep(0,ncol(snp_m)))
       rownames(snp_m)[nrow(snp_m)] = id
-      snp_m[id, maf_sub_meta_mut[[sample_col_name]]] = 1
+      if (!has_vaf){
+        snp_m[id, maf_sub_meta_mut[[sample_col_name]]] = 1
+      } else {
+        # If VAF information available, average VAF of meta-mutants records for each sample
+        for (barcode in unique(maf_sub_meta_mut[[sample_col_name]])){
+          maf_sub_meta_mut_barcode = subset(maf_sub_meta_mut, maf_sub_meta_mut[[sample_col_name]] == barcode)
+          snp_m[id, barcode] = mean(maf_sub_meta_mut_barcode[['VAF']])
+        }
+      }
       lookup = rbind(lookup, c(id, 'chr17', mean_pos_snp))
       rownames(lookup)[nrow(lookup)] = id
     }
@@ -118,19 +145,15 @@ merge_cfg = function(cfg_a, cfg_b){
   return(cfg_a)
 }
 
-get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m, lookup=NULL){
+get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m){
   # lookup: optional table for association between snp id and description
   # snp_m: snp matrix loaded to MatrixEQTL package
   rna = assay(mae[[1]][gene_name,,'RNA'])
   rna = t(rna)
   rna = data.frame(rna)
-  rna['class'] = as.factor(snp_m[snpid,rownames(rna)])
-  colnames(rna) = c('expression', 'class')
-  if (!is.null(lookup)){
-    var_name = rownames(lookup)[which(lookup$snpid==snpid)]
-    return(list('plot_df'=rna, 'var_name'=var_name))
-  }
-  return(list('plot_df'=rna, 'var_name'=NULL))
+  rna['mut_state'] = snp_m[snpid,rownames(rna)]
+  colnames(rna) = c('expression', 'mut_state')
+  return(rna)
 }
 
 get_var_info_from_maf = function(maf, snpid, lookup){
@@ -139,5 +162,73 @@ get_var_info_from_maf = function(maf, snpid, lookup){
   return(unique(maf$HGVSp_Short))
 }
 
+get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps'){
+  # Get eqtl that present in all groups specified
+  if (is.null(groups)){
+    groups = unique(eqtl_df[[group_col]])
+  }
+  co_eqtl = list()
+  for (snp in groups){
+    sub_eqtl = subset(eqtl_df, eqtl_df[[group_col]] == snp)
+    co_eqtl[[snp]] = sub_eqtl$gene
+  }
+  co_eqtl = Reduce(intersect, co_eqtl)
+  eqtl_df = subset(eqtl_df, eqtl_df[[group_col]] %in% groups & eqtl_df$gene %in% co_eqtl)
+  eqtl_df = eqtl_df[,which(!colnames(eqtl_df) %in% c('statistic', 'FDR'))]
+  eqtl_df = eqtl_df[order(eqtl_df$gene, eqtl_df$beta, decreasing = c(F,T)),]
+  return(eqtl_df)
+}
 
-
+genotype_pca = function(maf, out_dic=NULL, samples=NULL, file_out=FALSE,
+                        gene_col_name='Hugo_Symbol', sample_col_name='Tumor_Sample_Barcode'){
+  library(FactoMineR)
+  # maf: maf object
+  # out_dic: output directory
+  maf = as.data.frame(maf)
+  maf[[sample_col_name]] = as.character(maf[[sample_col_name]])
+  gene_pool = unique(maf[[gene_col_name]])
+  if (is.null(samples)){
+    samples = unique(maf[[sample_col_name]])
+  }
+  gene_m = matrix(0, nrow=length(gene_pool), ncol=length(samples))
+  rownames(gene_m) = gene_pool
+  colnames(gene_m) = samples
+  for (i in gene_pool){
+    gene_m[i, maf[which(maf[[gene_col_name]] == i), sample_col_name]] = 1
+  }
+  if (!is.null(samples)){
+    rest = samples[which(!samples %in% maf[[sample_col_name]])]
+    if (length(rest) > 0){
+      gene_m_aug = matrix(0, nrow=nrow(gene_m), ncol=length(rest))
+      rownames(gene_m_aug) = rownames(gene_m)
+      colnames(gene_m_aug) = rest
+      gene_m = cbind(gene_m, gene_m_aug)
+    }
+  }
+  
+  # PCA
+  library(factoextra)
+  pca.res = PCA(t(gene_m), ncp=20, graph = F)
+  ind = get_pca_ind(pca.res)
+  scre_plot = fviz_eig(pca.res, addlabels = T)
+  ggsave(file.path(out_dic, 'genotype_PCA.png'), scre_plot, device = 'png')
+  #df = data.frame('PC1'=ind$coord[,1], 'PC3'=ind$coord[,20])
+  #ggplot(df) +
+  #  geom_point(aes(x=PC1, y=PC3))
+  pca_coord = ind$coord
+  rownames(pca_coord) = gsub('\\.', '-', rownames(pca_coord))
+  if (file_out){
+    write.table(pca_coord, file.path(out_dic, 'genotype_PC20.txt'), sep='\t', row.names = T, quote = F) 
+  }
+  return(pca_coord)
+  
+  # Simulate to test if do SNP PCA possible
+  # dt = matrix(0, nrow=1000,ncol=10000)
+  # mut_row = sample(1:1000,50000, replace=TRUE)
+  # mut_col = sample(1:10000, 50000, replace=T)
+  # for (i in 1:50000){
+  #   dt[mut_row[i], mut_col[i]] = 1
+  # }
+  # pca.res = PCA(dt, ncp=20, graph = F)
+  # fviz_eig(pca.res)  # if use SNP to do PCA, the explained varibility will be as low as 0.1%
+}

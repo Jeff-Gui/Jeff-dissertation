@@ -16,6 +16,7 @@ preprocess:
     norm_gene:
     quantile: TRUE
     z_score: FALSE
+    rm_low_expr_gene: -1  # after log(x+1) transform, before normalization
 
 eQTL:
     min_vaf: 0.01
@@ -25,6 +26,7 @@ eQTL:
     genes: TP53  # which genes SNP located in should be considered, if blank, will consider all SNP. Comma separated.
     genepos: /  # gene location table specific to the version of genome assembly
     covariate_from_meta: # covariate as columns in the metadata table, comma separated
+    covariate_code: # pre-set covariates, e.g. GENO (genotype PCA), EXPR, comma separated
     pvOutputThreshold: 5e-2
     pvOutputThreshold_cis: 5e-2
     pvOutputThreshold_tra: 5e-2

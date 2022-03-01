@@ -1,27 +1,39 @@
 library(logging)
 library(tidyverse)
 library(maftools)
-library(limma)
+#library(limma)
 library(data.table)
+library(preprocessCore)
+library(RNOmni)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/maftools/inst/doc/maftools.html
 library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
 # setwd('/Users/jefft/Desktop/p53_project')
 # 
-# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018'
-# case_complete_nm = 'cases_complete.txt'
-# exp_nm = 'data_mrna_seq_v2_rsem.txt'
-# exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
-# cna_nm = 'data_cna.txt'
-# mut_nm = 'data_mutations.txt'
-# gene_col_nm = 'Hugo_Symbol'
-# sample_meta_nm = 'data_clinical_sample.txt'
-# patient_meta_nm = 'data_clinical_patient.txt'
+dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
+dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
+case_complete_nm = 'cases_complete.txt'
+#exp_nm = 'data_mrna_seq_v2_rsem.txt'
+exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
+cna_nm = 'data_cna.txt'
+mut_nm = 'data_mutations.txt'
+gene_col_nm = 'Hugo_Symbol'
+sample_meta_nm = 'data_clinical_sample.txt'
+patient_meta_nm = 'data_clinical_patient.txt'
+case_list_dir_nm = 'case_lists'
+na.str = ''
+has_log_ed = TRUE
+rm_low_expr_gene = NULL
+normalize_genes = NULL
+quantile_norm = TRUE
+z_score = FALSE
+diag_out = NULL
+filter_protein_coding = NULL
 
 clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   mtx = mtx[!is.na(mtx[gene_col_nm]),]
   # remove dup by taking the record with the largest mean
-  dup_genes = mtx[[gene_col_nm]][which(duplicated(mtx[[gene_col_nm]]))]
+  dup_genes = unique(mtx[[gene_col_nm]][which(duplicated(mtx[[gene_col_nm]]))])
   remove_rows = c()
   for (i in dup_genes){
     sub = subset(mtx, mtx[[gene_col_nm]]==i)
@@ -52,10 +64,13 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
                          patient_meta_nm = 'data_clinical_patient.txt',
                          case_list_dir_nm = 'case_lists',
                          na.str = '',
-                         normalize_genes = NULL,
-                         z_score = FALSE,
                          has_log_ed = TRUE,
-                         quantile_norm = TRUE){
+                         rm_low_expr_gene = NULL,
+                         normalize_genes = NULL,
+                         quantile_norm = TRUE,
+                         z_score = FALSE,
+                         diag_out = NULL,
+                         filter_protein_coding = NULL){
   
   loginfo(logger = 'data.loader', 'Not loading CNA data.')
   patient_id_col_nm = 'PATIENT_ID'
@@ -66,28 +81,21 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   exps = as.data.frame(exps)
   loginfo(logger ='data.loader', 
           'Expression matrix dim before cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
+  complete_cases = intersect(colnames(exps), complete_cases)  # sometimes, complete cases may not account for expression matrix. 
   
   #cnas = fread(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
   #cnas = as.data.frame(cnas)
-  muts = read.maf(file.path(dataset_home, mut_nm))
-  sample_meta = read.table(file.path(dataset_home, sample_meta_nm), sep = '\t', comment.char = '#', header = T)
-  patient_meta = read.table(file.path(dataset_home, patient_meta_nm), sep = '\t', comment.char = '#', header = T)
+  sample_meta = read.table(file.path(dataset_home, sample_meta_nm), sep = '\t', comment.char = '#', header = T, quote = '\"', fill=T)
+  patient_meta = read.table(file.path(dataset_home, patient_meta_nm), sep = '\t', comment.char = '#', header = T, quote = '\"', fill=T)
   sample_meta = left_join(sample_meta, patient_meta, by = patient_id_col_nm)
   
-  # Calculate VAF for filtering (not in this function)
-  flag = FALSE
-  if (('t_ref_count' %in% colnames(muts@data)) & ('t_alt_count' %in% colnames(muts@data))){
-    if (!anyNA(muts@data$t_ref_count)){
-      loginfo('Found t_ref_count and t_alt_count, calculating VAF.', logger = 'data.loader')
-      muts@data[['VAF']] = muts@data$t_alt_count / (muts@data$t_alt_count + muts@data$t_ref_count)
-      flag = TRUE
-    }
-  }
-  if (!flag){
-    loginfo('No VAF information in the MAF file.', logger = 'data.loader')
+  exps = clean_matrix(exps, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
+  # filter out protein coding
+  if (!is.null(filter_protein_coding)){
+    genepos = read.table(filter_protein_coding, sep='\t', header = T)
+    exps = exps[which(rownames(exps) %in% genepos$geneid),]
   }
   
-  exps = clean_matrix(exps, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
   #cnas = clean_matrix(cnas, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
   #co_genes = as.character(ordered(intersect(rownames(exps), rownames(cnas))))
   #exps = exps[co_genes,]
@@ -95,6 +103,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   loginfo(logger = 'data.loader',
           'Expression matrix dim after cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
   
+  ## Normalization and filtering low-expressing genes
   # log2(x+1) if has not been log transformed. NA must has been addressed in above cleaning step.
   LOG_TRANS = has_log_ed
   if (!LOG_TRANS){
@@ -102,6 +111,33 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     exps = log2(exps + 1)
   }
   
+  # Remove low-expressing genes
+  expr_mean = rowMeans(exps)
+  if (!is.null(rm_low_expr_gene)){
+    rm_id = which(expr_mean < rm_low_expr_gene)
+    names(rm_id) = NULL
+    if (length(rm_id)>0){
+      exps = exps[-rm_id,] 
+    }
+  }
+  expr_mean_after = rowMeans(exps)
+  pt = data.frame('value'=c(expr_mean, expr_mean_after))
+  pt['cls'] = c(rep('before', length(expr_mean)), rep('after', length(expr_mean_after)))
+  gp = ggplot(pt) + theme_classic() +
+    geom_histogram(aes(x=value, fill=cls), bins=100) +
+    scale_x_continuous(expand = c(0,0)) +
+    scale_y_continuous(expand = c(0,0)) +
+    facet_wrap(~cls, ncol=1, scales = 'free') +
+    labs(title = paste(length(expr_mean_after), length(expr_mean), 
+                       'remain under threshold', rm_low_expr_gene, sep='-')) +
+    theme(legend.position = 'none')
+  if (!is.null(diag_out)){
+    ggsave(file.path(diag_out, 'expression_hist.png'), gp, device = 'png')
+  }
+  
+  gene_nm = rownames(exps)
+  sample_nm = colnames(exps)
+  # Normalize with house-keeping genes (divide)
   if (!is.null(normalize_genes)){
     normalize_genes = normalize_genes[which(normalize_genes %in% rownames(exps))]
     if (length(normalize_genes)==0){
@@ -116,17 +152,38 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     }
   }
   
-  # Quantile normalization ?
+  # Quantile normalization
   if (quantile_norm){
-    exps = normalizeBetweenArrays(exps) 
+    loginfo('Quantile-normalizing across samples...', logger = 'data.loader')
+    # exps = normalizeBetweenArrays(exps)
+    exps = normalize.quantiles(as.matrix(exps))
   }
   
+  # Rank-based normalization z-score
   if (z_score){
-    loginfo('Z-scaling data...', logger = 'data.loader')
-    exps = t(scale(t(exps)))
+    loginfo('Z-scaling each gene based on rank...', logger = 'data.loader')
+    # exps = t(scale(t(exps)))
+    exps = t(apply(exps, 1, RankNorm))
   }
+  
+  rownames(exps) = gene_nm
+  colnames(exps) = sample_nm
   exps = as.data.frame(exps)
   
+  ## Handling mutation data
+  muts = read.maf(file.path(dataset_home, mut_nm))
+  # Calculate VAF for filtering (not in this function)
+  flag = FALSE
+  if (('t_ref_count' %in% colnames(muts@data)) & ('t_alt_count' %in% colnames(muts@data))){
+    if (!anyNA(muts@data$t_ref_count)){
+      loginfo('Found t_ref_count and t_alt_count, calculating VAF.', logger = 'data.loader')
+      muts@data[['VAF']] = muts@data$t_alt_count / (muts@data$t_alt_count + muts@data$t_ref_count)
+      flag = TRUE
+    }
+  }
+  if (!flag){
+    loginfo('No VAF information in the MAF file.', logger = 'data.loader')
+  }
   # muts = subsetMaf(muts, tsb=complete_cases, genes = co_genes)  # IF CNA here
   muts = subsetMaf(muts, tsb=complete_cases)
   sample_meta = subset(sample_meta, sample_meta$SAMPLE_ID %in% complete_cases)
@@ -140,7 +197,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   ms_n = as.numeric(g_s[which(g_s[[gene_col_nm]]=='TP53'), 'MutatedSamples'])
   loginfo(logger = 'data.loader', 'p53 mutation: %d missense out of %d mutations. %d mutated samples.', mm_n, t_n, ms_n)
   
-  # construct multi-assay-experiment
+  ## Construct multi-assay-experiment
   exprdat = SummarizedExperiment(exps)
   colnames(exprdat) = complete_cases
   #cnadat = SummarizedExperiment(cnas)
