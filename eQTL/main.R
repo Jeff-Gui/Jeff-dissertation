@@ -22,41 +22,20 @@ if (config_name != 'dafault.yaml'){
   config = yaml.load_file(file.path('config', config_name))
   config = merge_cfg(default_cfg, config)
 }
+config = pcs_cfg(config)
 dt_cfg = config$dataset
-if (is.null(dt_cfg$na.str)){
-  dt_cfg$na.str = ''
-}
 eqtl_cfg = config$eQTL
-map = c(modelLINEAR, modelANOVA, modelLINEAR_CROSS)
-names(map) = c('LINEAR', 'ANOVA', 'LINEAR_CROSS')
-useModel = map[eqtl_cfg$model]
-if (is.null(eqtl_cfg$output_file_name_tra)){
-  eqtl_cfg$output_file_name_tra = tempfile()
-}
-if (is.null(eqtl_cfg$output_file_name_cis)){
-  eqtl_cfg$output_file_name_cis = tempfile()
-}
-if (!dir.exists(config$output)){
-  dir.create(config$output)
-}
-if (eqtl_cfg$meta_mut[1] == '/'){
-  eqtl_cfg$meta_mut = NULL
-}
+preprocess_cfg = config$preprocess
 write_yaml(config, file.path(config$output, 'config.yaml'))
 
+## Handle log
 logpath = file.path(config$output, 'log.txt')
 if (file.exists(logpath) & refresh_log){
   file.remove(logpath)
 }
-
 basicConfig(level = 'FINEST')
 addHandler(writeToFile, file=logpath, level='DEBUG')
 loginfo('Loading data...', logger = 'main')
-
-preprocess_cfg = config$preprocess
-if (!is.null(preprocess_cfg$norm_gene)){
-  preprocess_cfg$norm_gene = strsplit(preprocess_cfg$norm_gene, split = ',')[[1]]
-}
 
 ## Load data
 if (!use_cache){
@@ -149,6 +128,9 @@ cvrt = SlicedData$new()$CreateFromMatrix(cvrt)
 errorCovariance = numeric()
 
 ## Run eQTL
+map = c(modelLINEAR, modelANOVA, modelLINEAR_CROSS)
+names(map) = c('LINEAR', 'ANOVA', 'LINEAR_CROSS')
+useModel = map[eqtl_cfg$model]
 gc()
 me = Matrix_eQTL_main(
   snps = snps, 
@@ -192,6 +174,9 @@ write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'),
 gc()
 
 if (!source){
+  trans_eqtls = read.table('/Users/jefft/Desktop/p53_project/scripts/eQTL/outputs/tcga_brca_raw_seq/trans_eqtl_fdr005.txt', 
+                           header=T, sep='\t')
+  library(ggpubr)
   ## Visualise the results
   # overall
   ggplot(trans_eqtls, aes(x=beta, y=1/FDR)) + theme_classic() +
@@ -200,8 +185,8 @@ if (!source){
     facet_wrap(~protein_change, ncol=2)
   
   # per-gene
-  snpid_to_plot = 'snp14'
-  gene_to_plot = 'SCAF4'
+  snpid_to_plot = 'hot_spot'
+  gene_to_plot = 'MRPL47'
   
   plot_df = get_single_eqtl_plot_dt(gene_to_plot, snpid_to_plot, dt, as.matrix(snps))
   plot_title = unique(trans_eqtls$protein_change[which(trans_eqtls$snps == snpid_to_plot)])
@@ -214,7 +199,17 @@ if (!source){
     # geom_boxplot(width = 0.05, outlier.shape = NA) +
     geom_jitter(width = 0.2, alpha=0.5) +
     labs(x=plot_title, title = strsplit(config_name, split='\\.')[[1]][1], y=gene_to_plot)
-
+  
+  ggplot(plot_df, aes(x=mut_cls, y=expression)) + theme_classic() +
+    geom_violin(width = 0.5) +
+    geom_jitter(width = 0.2, alpha=0.5) +
+    labs(x=plot_title, title = strsplit(config_name, split='\\.')[[1]][1], y=gene_to_plot) +
+    stat_compare_means(comparisons = list(c('eQTL mutant', 'frameshift'),
+                                          c('eQTL mutant', 'nonsense'),
+                                          c('eQTL mutant', 'other missense'),
+                                          c('eQTL mutant', 'wildtype')),
+                       aes(label=..p.signif..), method = 't.test')
+  
   # CCLE only
   a + facet_wrap(~site, ncol=5)
   
@@ -235,7 +230,6 @@ if (!source){
   #   geom_vline(xintercept = 0.07, linetype='dotted') +
   #   # geom_jitter(data=subset(plot_df, mut_state==0),aes(x=0, y=expression), width = 0.1, alpha=0.5) +
   #   labs(x=plot_title, title = strsplit(config_name, split='\\.')[[1]][1], y=gene_to_plot)
-  # 
   
   # positive controls
   pos_ctr_eqtl = subset(trans_eqtls, trans_eqtls$gene %in%

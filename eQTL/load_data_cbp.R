@@ -10,25 +10,25 @@ library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
 # setwd('/Users/jefft/Desktop/p53_project')
 # 
-dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
-dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
-case_complete_nm = 'cases_complete.txt'
-#exp_nm = 'data_mrna_seq_v2_rsem.txt'
-exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
-cna_nm = 'data_cna.txt'
-mut_nm = 'data_mutations.txt'
-gene_col_nm = 'Hugo_Symbol'
-sample_meta_nm = 'data_clinical_sample.txt'
-patient_meta_nm = 'data_clinical_patient.txt'
-case_list_dir_nm = 'case_lists'
-na.str = ''
-has_log_ed = TRUE
-rm_low_expr_gene = NULL
-normalize_genes = NULL
-quantile_norm = TRUE
-z_score = FALSE
-diag_out = NULL
-filter_protein_coding = NULL
+# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
+# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
+# case_complete_nm = 'cases_complete.txt'
+# #exp_nm = 'data_mrna_seq_v2_rsem.txt'
+# exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
+# cna_nm = 'data_cna.txt'
+# mut_nm = 'data_mutations.txt'
+# gene_col_nm = 'Hugo_Symbol'
+# sample_meta_nm = 'data_clinical_sample.txt'
+# patient_meta_nm = 'data_clinical_patient.txt'
+# case_list_dir_nm = 'case_lists'
+# na.str = ''
+# has_log_ed = TRUE
+# rm_low_expr_gene = NULL
+# normalize_genes = NULL
+# quantile_norm = TRUE
+# z_score = FALSE
+# diag_out = NULL
+# filter_protein_coding = NULL
 
 clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   mtx = mtx[!is.na(mtx[gene_col_nm]),]
@@ -68,6 +68,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
                          rm_low_expr_gene = NULL,
                          normalize_genes = NULL,
                          quantile_norm = TRUE,
+                         diploid_norm = FALSE,
                          z_score = FALSE,
                          diag_out = NULL,
                          filter_protein_coding = NULL){
@@ -112,27 +113,9 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   }
   
   # Remove low-expressing genes
-  expr_mean = rowMeans(exps)
-  if (!is.null(rm_low_expr_gene)){
-    rm_id = which(expr_mean < rm_low_expr_gene)
-    names(rm_id) = NULL
-    if (length(rm_id)>0){
-      exps = exps[-rm_id,] 
-    }
-  }
-  expr_mean_after = rowMeans(exps)
-  pt = data.frame('value'=c(expr_mean, expr_mean_after))
-  pt['cls'] = c(rep('before', length(expr_mean)), rep('after', length(expr_mean_after)))
-  gp = ggplot(pt) + theme_classic() +
-    geom_histogram(aes(x=value, fill=cls), bins=100) +
-    scale_x_continuous(expand = c(0,0)) +
-    scale_y_continuous(expand = c(0,0)) +
-    facet_wrap(~cls, ncol=1, scales = 'free') +
-    labs(title = paste(length(expr_mean_after), length(expr_mean), 
-                       'remain under threshold', rm_low_expr_gene, sep='-')) +
-    theme(legend.position = 'none')
-  if (!is.null(diag_out)){
-    ggsave(file.path(diag_out, 'expression_hist.png'), gp, device = 'png')
+  if (!diploid_norm){
+    # for normalize by diploid samples, remove low-expressing at last
+    exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
   }
   
   gene_nm = rownames(exps)
@@ -166,9 +149,18 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     exps = t(apply(exps, 1, RankNorm))
   }
   
+  # Normalize to diploid
+  if (diploid_norm){
+    exps = diploid_norm(exps)
+  }
+  
   rownames(exps) = gene_nm
   colnames(exps) = sample_nm
   exps = as.data.frame(exps)
+  
+  if (diploid_norm){
+    exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
+  }
   
   ## Handling mutation data
   muts = read.maf(file.path(dataset_home, mut_nm))
@@ -269,7 +261,55 @@ align_expression = function(merged_exp, sample_factor){
   
   # Step 1 use limma package
   merged_exp = normalizeBetweenArrays(merged_exp)
-  
+}
+
+
+# normalize to diploid samples
+norm_exp_to_diploid = function(cnas, exps){
+  col_spl = colnames(cnas)
+  mask = as.matrix(cnas)
+  mask[which(mask!=0)] = NA
+  mask[which(mask==0)] = 1
+  mask[which(is.na(mask))] = 0
+  mask = exps * mask
+  mask[which(mask==0)] = NA
+  mus = rowMeans(mask, na.rm = T)
+  stds = rowSds(mask, na.rm = T)
+  for (i in 1:nrow(exps)){
+    if (!is.na(mus[i])) {
+      exps[i,] = (exps[i,] - mus[i]) / stds[i]
+    } else {
+      exps[i,] = NA
+    }
+  }
+  return(exps)
+}
+
+
+remove_low_genes = function(exps, rm_low_expr_gene, diag_out=NULL){
+  expr_mean = rowMeans(exps)
+  if (!is.null(rm_low_expr_gene)){
+    rm_id = which(expr_mean < rm_low_expr_gene)
+    names(rm_id) = NULL
+    if (length(rm_id)>0){
+      exps = exps[-rm_id,] 
+    }
+  }
+  expr_mean_after = rowMeans(exps)
+  pt = data.frame('value'=c(expr_mean, expr_mean_after))
+  pt['cls'] = c(rep('before', length(expr_mean)), rep('after', length(expr_mean_after)))
+  gp = ggplot(pt) + theme_classic() +
+    geom_histogram(aes(x=value, fill=cls), bins=100) +
+    scale_x_continuous(expand = c(0,0)) +
+    scale_y_continuous(expand = c(0,0)) +
+    facet_wrap(~cls, ncol=1, scales = 'free') +
+    labs(title = paste(length(expr_mean_after), length(expr_mean), 
+                       'remain under threshold', rm_low_expr_gene, sep='-')) +
+    theme(legend.position = 'none')
+  if (!is.null(diag_out)){
+    ggsave(file.path(diag_out, 'expression_hist.png'), gp, device = 'png')
+  }
+  return(exps)
 }
 
 
@@ -295,34 +335,3 @@ align_expression = function(merged_exp, sample_factor){
 # ggplot(df, aes(x=PC1,y=PC2)) + geom_point(aes(color=dataset))
 
 # MAF can be converted to mae, but not summarizedexperiment.
-
-
-#=========================== Try TCGABiolink?
-
-#===========================
-### Below cbioportal api implementation. Too slow
-# library(cBioPortalData)
-# cbio = cBioPortal()
-# studies = getStudies(api = cbio)
-# # get all genes
-# gt = geneTable(cbio, pageSize = 999999) %>% 
-#   filter(type %in% c('protein-coding', 'miRNA', 'snoRNA', 'ncRNA', 'snRNA'))
-# 
-# # Cached in '/Users/jefft/Library/Caches/org.R-project.R/R/cBioPortalData'
-# sid = 'brca_tcga'  # must in studyId in the table above
-# tcga_brca_clin = clinicalData(cbio, studyId = sid)
-# mprofile = molecularProfiles(api = cbio, studyId = sid)
-# samples = sampleLists(cbio, studyId = sid)
-# sl_id = samples$sampleListId[which(samples$name=='Complete samples')]
-# dt = getDataByGenes(cbio, studyId = sid, genes = gt$entrezGeneId,
-#               by = 'entrezGeneId', molecularProfileIds = 'brca_tcga_rna_seq_v2_mrna',
-#               sampleListId = sl_id)
-# 
-# # Inspect below to select wanted profile
-# mprofile_ftd = mprofile[which(mprofile$molecularAlterationType %in% 
-#                                 c('MRNA_EXPRESSION', 'MUTATION_EXTENDED')),]
-# mprofile_ftd = mprofile[which(mprofile$name %in% c('Mutations', 'mRNA expression (RNA Seq V2 RSEM)')),]
-# 
-# exps = molecularData(api = cbio, molecularProfileIds = mprofile_ftd$molecularProfileId[1],
-#                      entrezGeneIds = 1:1000, sampleIds = c())
-# muts = molecularData(api = cbio, molecularProfileIds = mprofile_ftd$molecularProfileId[2])

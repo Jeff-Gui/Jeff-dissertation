@@ -53,6 +53,18 @@ ctr_plt
 ggsave(file.path('/Users/jefft/Desktop/p53_project/Plots/eQTL', 'control_gene_plt_beta_1.pdf'),
        plot=ctr_plt, width=15,height=8,units='in',device='pdf',dpi=300)
 
+library(ggvenn)
+library(ggplotify)
+# Overlap among mutations
+exp_id = 'tcga_brca_raw_seq'
+ovl_mut = subset(coll, coll$experiment==exp_id)
+gene_nm = list()
+for (i in unique(ovl_mut$protein_change)){
+  gene_nm[[i]] = subset(ovl_mut, ovl_mut$protein_change==i)$gene
+}
+venn_plt = ggvenn(gene_nm, stroke_size = 0.5, set_name_size = 4) + 
+  labs(title = exp_id)
+
 
 # Discovery
 mut_to_see = 'hot_spot'  # tissue_high, breast_w2016, hot_spot, p.R248Q, p.R175H
@@ -78,12 +90,10 @@ gene_nm = list()
 for (i in unique(mut$experiment)){
   gene_nm[[i]] = subset(mut, mut$experiment==i)$gene
 }
-
-library(ggvenn)
-library(ggplotify)
-venn_plt = ggvenn(gene_nm, stroke_size = 0.5, set_name_size = 4) + 
-  labs(title = mut_to_see)
-
+venn_plt = ggvenn(gene_nm, stroke_size = 0.5, set_name_size = 2) + 
+  labs(title = exp_id)
+ggsave(file.path('/Users/jefft/Desktop/p53_project/Plots/eQTL', paste('Mut_overlap_',exp_id,'.pdf', sep='')),
+       plot=venn_plt, width=6,height=4,units='in',device='pdf',dpi=300)
 
 overlap_up = get_intersection_eqtl(subset(mut, mut$beta > 1), group_col = 'experiment',
                                 groups = c('tcga_brca_raw_seq')
@@ -105,13 +115,14 @@ library(GO.db)
 library(biomaRt)
 library(gridExtra)
 
+#mart = useMart("ensembl", "hsapiens_gene_ensembl")
+#gene_ETR = getBM(attributes = "entrezgene_id", filters = "symbol", values = overlapping_gene, mart = mart)
+
 do_GO = function(df){
   avg_score = aggregate(beta~gene, df, mean)
   avg_score = avg_score[order(avg_score$beta, decreasing = T),]
   overlapping_gene = avg_score$gene
   gene_ETR = bitr(overlapping_gene, fromType = 'SYMBOL', toType = 'ENTREZID', OrgDb = org.Hs.eg.db)
-  #mart = useMart("ensembl", "hsapiens_gene_ensembl")
-  #gene_ETR = getBM(attributes = "entrezgene_id", filters = "symbol", values = overlapping_gene, mart = mart)
   
   # Any better package?
   ego = enrichGO(

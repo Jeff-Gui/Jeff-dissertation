@@ -2,6 +2,8 @@ library(logging)
 library(MatrixEQTL)
 library(maftools)
 library(tidyverse)
+library(MultiAssayExperiment)
+
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
                       min_sample_per_snp=0.01, meta_mut_fp=NULL){
@@ -19,6 +21,7 @@ get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
   gene = gene$CreateFromMatrix(as.matrix(expression))
   return(list('gene'=gene, 'snp'=snp, 'snp_lookup'=rs[[1]]))
 }
+
 
 get_SNP_m_from_maf = function(maf, sample_col_name,
                               genes=NULL, samples=NULL,
@@ -130,6 +133,7 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   return(list('lookup'=lookup, 'SNP_m'=snp_m))
 }
 
+
 merge_cfg = function(cfg_a, cfg_b){
   # merge config b into config a, b will overlap with a
   # does not allow b having extra config than a
@@ -145,22 +149,40 @@ merge_cfg = function(cfg_a, cfg_b){
   return(cfg_a)
 }
 
-get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m){
+
+get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m,
+                                   sample_col_name='Tumor_Sample_Barcode',
+                                   gene_col_name='Hugo_Symbol'){
   # lookup: optional table for association between snp id and description
   # snp_m: snp matrix loaded to MatrixEQTL package
   rna = assay(mae[[1]][gene_name,,'RNA'])
+  if (nrow(rna)==0){
+    print('Gene not in expression matrix')
+    return(NULL)
+  }
   rna = t(rna)
   rna = data.frame(rna)
   rna['mut_state'] = snp_m[snpid,rownames(rna)]
   colnames(rna) = c('expression', 'mut_state')
+  
+  # annotate mut class
+  rna[which(rna$mut_state==0), 'mut_cls'] = 'wildtype'
+  mut_ann = annotate_sample_mut(mae[[2]]@data, sample_col_name, 'TP53', gene_col_name)
+  maf = subset(mae[[2]]@data, mae[[2]]@data[[gene_col_name]] == 'TP53')
+  for (i in names(mut_ann)){
+    rna[mut_ann[[i]], 'mut_cls'] = i
+  }
+  rna[which(rna$mut_state!=0), 'mut_cls'] = 'eQTL mutant'
   return(rna)
 }
+
 
 get_var_info_from_maf = function(maf, snpid, lookup){
   var_name = rownames(lookup)[which(lookup$snpid==snpid)]
   maf = subset(maf, maf$HGVSc == var_name)
   return(unique(maf$HGVSp_Short))
 }
+
 
 get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps'){
   # Get eqtl that present in all groups specified
@@ -178,6 +200,7 @@ get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps'){
   eqtl_df = eqtl_df[order(eqtl_df$gene, eqtl_df$beta, decreasing = c(F,T)),]
   return(eqtl_df)
 }
+
 
 genotype_pca = function(maf, out_dic=NULL, samples=NULL, file_out=FALSE,
                         gene_col_name='Hugo_Symbol', sample_col_name='Tumor_Sample_Barcode'){
@@ -232,3 +255,55 @@ genotype_pca = function(maf, out_dic=NULL, samples=NULL, file_out=FALSE,
   # pca.res = PCA(dt, ncp=20, graph = F)
   # fviz_eig(pca.res)  # if use SNP to do PCA, the explained varibility will be as low as 0.1%
 }
+
+
+annotate_sample_mut = function(maf, sample_col_name = 'Tumor_Sample_Barcode', gene='TP53', gene_col_name = 'Hugo_Symbol'){
+  maf = subset(maf, maf[[gene_col_name]] %in% gene)
+  maf[[sample_col_name]] = as.character(maf[[sample_col_name]])
+  mis_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='missense_variant')])
+  non_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='stop_gained')])
+  fsv_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='frameshift_variant')])
+  # Sample may have more than one kinds of mutations
+  pool = c(mis_sample, non_sample, fsv_sample)
+  others = pool[which(duplicated(pool))]
+  big_pool = unique(maf[[sample_col_name]])
+  others = c(others,  big_pool[which(!big_pool %in% pool)])
+  return(list(
+    'missense' = mis_sample,
+    'nonsense' = non_sample,
+    'frameshift' = fsv_sample,
+    'others' = others
+  ))
+}
+
+
+pcs_cfg = function(config){
+  dt_cfg = config$dataset
+  eqtl_cfg = config$eQTL
+  preprocess_cfg = config$preprocess
+  
+  if (is.null(dt_cfg$na.str)){
+    dt_cfg$na.str = ''
+  }
+  if (is.null(eqtl_cfg$output_file_name_tra)){
+    eqtl_cfg$output_file_name_tra = tempfile()
+  }
+  if (is.null(eqtl_cfg$output_file_name_cis)){
+    eqtl_cfg$output_file_name_cis = tempfile()
+  }
+  if (!dir.exists(config$output)){
+    dir.create(config$output)
+  }
+  if (eqtl_cfg$meta_mut[1] == '/'){
+    eqtl_cfg$meta_mut = NULL
+  }
+  if (!is.null(preprocess_cfg$norm_gene)){
+    preprocess_cfg$norm_gene = strsplit(preprocess_cfg$norm_gene, split = ',')[[1]]
+  }
+  
+  config$dataset = dt_cfg
+  config$eQTL = eqtl_cfg
+  config$preprocess = preprocess_cfg
+  return(config)
+}
+
