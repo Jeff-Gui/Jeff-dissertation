@@ -1,6 +1,6 @@
-output: outputs/tcga_luad_raw_seq
+output: outputs/tcga_blca_raw_seq
 dataset:
-    dataset_home: /Users/jefft/Desktop/p53_project/datasets/5-LUAD-TCGA/luad_tcga_pan_can_atlas_2018
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/6-BLCA-TCGA/blca_tcga_pan_can_atlas_2018
     has_log_ed: FALSE
     exp_nm: data_mrna_seq_v2_rsem.txt
     na.str: 
@@ -9,6 +9,7 @@ preprocess:
     quantile: TRUE
     z_score: TRUE
     rm_low_expr_gene: 1
+    diploid_norm: FALSE
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
@@ -16,4 +17,4 @@ eQTL:
     covariate_code: GENO
     meta_mut: 
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/LUAD_UMD.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/BLCA_UMD.txt

@@ -1,15 +1,23 @@
 output: outputs/tcga_brca_raw_seq
 dataset:
-    dataset_home: /Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/brca_tcga_pan_can_atlas_2018
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/1-BRCA-TCGA/brca_tcga_pan_can_atlas_2018
     has_log_ed: FALSE
     exp_nm: data_mrna_seq_v2_rsem.txt
     na.str: 
+#    has_log_ed: TRUE
+#    exp_nm: data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt
+#    na.str: NA
+#    has_log_ed: TRUE
+#    exp_nm: data_mrna_seq_v2_rsem_zscores_ref_all_samples.txt
+#    na.str: NA
 
 preprocess:
-    quantile: TRUE
+#    norm_gene: GAPDH,ACTB
+    quantile: TRUE  # TCGA data has already been batch-corrected, but a quantile norm can be followed by house-keeping gene norm. 
     z_score: TRUE
     rm_low_expr_gene: 1
     diploid_norm: FALSE
+#    rm_low_expr_gene: -1
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv

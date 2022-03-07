@@ -1,24 +1,19 @@
 output: outputs/tcga_coad_raw_seq
 dataset:
-    dataset_home: /Users/jefft/Desktop/p53_project/datasets/COAD-TCGA/coadread_tcga_pan_can_atlas_2018
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/4-COAD-TCGA/coadread_tcga_pan_can_atlas_2018
     has_log_ed: FALSE
     exp_nm: data_mrna_seq_v2_rsem.txt
     na.str: NA
-#    has_log_ed: TRUE
-#    exp_nm: data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt
-#    na.str: NA
 
 preprocess:
-#    norm_gene: GAPDH,ACTB
-    quantile: TRUE  # TCGA data has already been batch-corrected, but a quantile norm can be followed by house-keeping gene norm. 
+    quantile: TRUE
     z_score: TRUE
-#    rm_low_expr_gene: -10
     rm_low_expr_gene: 1
+    diploid_norm: FALSE
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
     covariate_from_meta: AGE,SEX
     covariate_code: GENO
     meta_mut: 
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/breast_COSMIC.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt

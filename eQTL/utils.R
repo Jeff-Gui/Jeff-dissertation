@@ -2,6 +2,7 @@ library(logging)
 library(MatrixEQTL)
 library(maftools)
 library(tidyverse)
+library(stringr)
 library(MultiAssayExperiment)
 
 
@@ -33,17 +34,7 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   
   # TODO: classify snp as 0, 1, or 2.
   
-  meta_mut = data.frame()
-  if (!is.null(meta_mut_fp)){
-    for (fp in meta_mut_fp){
-      meta_mut_sub = read.table(fp, sep='\t', header = T) 
-      meta_mut = rbind(meta_mut, meta_mut_sub)
-    }
-    colnames(meta_mut) = c('meta_mut_id', 'aa_pos')
-  }
-  if (sum(duplicated(meta_mut))>0){
-    meta_mut = meta_mut[-duplicated(meta_mut),] 
-  }
+  meta_mut = load_meta_mut(meta_mut_fp)
   
   maf = as.data.frame(maf)
   sample_col_id = which(colnames(maf) == sample_col_name)
@@ -129,7 +120,10 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
     snp_m = snp_m[which(!rownames(snp_m) %in% rm_snps),]
     lookup = subset(lookup, !lookup$snpid %in% rm_snps)
   }
-  
+  if (is.null(dim(snp_m))){
+    snp_m = t(as.matrix(snp_m))
+    rownames(snp_m) = lookup$snpid[1]
+  }
   return(list('lookup'=lookup, 'SNP_m'=snp_m))
 }
 
@@ -307,3 +301,61 @@ pcs_cfg = function(config){
   return(config)
 }
 
+
+get_binary_SNP_m_from_maf = function(maf, snp_list, snp_col_nm=NULL,
+                                     samples = NULL,
+                                     gene='TP53', 
+                                     sample_col_name='Tumor_Sample_Barcode',
+                                     gene_col_name='Hugo_Symbol', mode='amino_acid'){
+  maf = subset(maf, maf[[gene_col_name]] == gene)
+  # mode: if amino_acid, then should be specific mutation.
+  # if position, then should be location only.
+  if (mode=='position'){
+    ext = sapply(maf[['Protein_Change']], function(x){strsplit(x, split = '\\.')[[1]][2]})
+    maf[['position']] = as.numeric(str_extract(ext,"(?<=[A-Z])[0-9]+(?=[A-Z])"))
+    snp_col_nm = 'position'
+  }
+  
+  snp_list_qc = list()
+  for (i in 1:length(snp_list)){
+    if (length(intersect(unlist(snp_list[[i]]), maf[[snp_col_nm]]))>=0){
+      snp_list_qc[[as.character(i)]] = snp_list[[i]]
+    }
+  }
+  if (length(snp_list_qc)<1){
+    return(matrix())
+  }
+  if (is.null(samples)){
+    samples = unique(maf[[sample_col_name]])
+  }
+  m = matrix(0, nrow=length(samples), ncol = length(snp_list_qc))
+  for (i in 1:nrow(m)){
+    sub_maf = subset(maf, maf[[sample_col_name]] == samples[i])
+    for (j in 1:ncol(m)){
+      if (length(intersect(snp_list_qc[[j]], sub_maf[[snp_col_nm]]))>0){
+        m[i,j] = 1
+      }
+    }
+  }
+  rownames(m) = samples
+  colnames(m) = as.vector(t(lapply(snp_list_qc, function(x){
+    return(paste(x, collapse = '_'))
+  })))
+  return(m)
+}
+
+
+load_meta_mut = function(meta_mut_fp){
+  meta_mut = data.frame()
+  if (!is.null(meta_mut_fp)){
+    for (fp in meta_mut_fp){
+      meta_mut_sub = read.table(fp, sep='\t', header = T) 
+      meta_mut = rbind(meta_mut, meta_mut_sub)
+    }
+    colnames(meta_mut) = c('meta_mut_id', 'aa_pos')
+  }
+  if (sum(duplicated(meta_mut))>0){
+    meta_mut = meta_mut[-duplicated(meta_mut),] 
+  }
+  return(meta_mut)
+}

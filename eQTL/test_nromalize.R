@@ -74,10 +74,15 @@ for (i in 1:nrow(exps)){
 }
 
 # compare with pre-computed table
-exps_pre = fread(file.path(dataset_home, exp_target_nm), sep='\t', header = T, na.strings = 'NA')
+exps = assay(dt[[1]][,,'RNA'])
+gene_col_nm = 'Hugo_Symbol'
+exps_pre = fread('/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019/data_mrna_seq_rpkm_zscores_ref_diploid_samples.txt',
+                 sep='\t', header = T, na.strings = 'NA')
+exps_pre = fread('/Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018/data_mrna_seq_v2_rsem_zscores_ref_diploid_samples.txt',
+                 sep='\t', header = T, na.strings = 'NA')
 exps_pre = as.data.frame(exps_pre)
-exps_pre = clean_matrix(exps_pre, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
-exps_pre = exps_pre[co_genes,]
+exps_pre = clean_matrix(exps_pre, complete_cases_dot = colnames(exps), gene_col_nm = gene_col_nm)
+exps_pre = exps_pre[rownames(exps),]
 exps_pre = as.matrix(exps_pre)
 
 pheatmap::pheatmap(cbind(exps[1:200,1:200], exps_pre[1:200,1:200]), 

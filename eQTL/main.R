@@ -8,12 +8,13 @@ source('load_data_cbp.R')
 gc()
 
 # config_name = 'metabric.yaml'
-# ccle.yaml
-config_name = 'tcga_brca.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
+# tcga_stad.yaml, tcga_hnsc.yaml
+# ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
+config_name = 'tcga_stad.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
 refresh_log = TRUE
-save_intermediate = FALSE  # may spend extra time
+save_intermediate = TRUE  # may spend extra time
 use_cache = FALSE
-use_cache_geno_pca = TRUE
+use_cache_geno_pca = FALSE
 source = TRUE
 
 ## Handle config
@@ -55,7 +56,8 @@ if (!use_cache){
                      has_log_ed = dt_cfg$has_log_ed,
                      rm_low_expr_gene = as.numeric(preprocess_cfg$rm_low_expr_gene),
                      diag_out = config$output,
-                     filter_protein_coding = eqtl_cfg$genepos)
+                     filter_protein_coding = eqtl_cfg$genepos,
+                     diploid_norm = preprocess_cfg$diploid_norm)
   gc()
   if (save_intermediate){
     save(dt, file = file.path(dirname(dt_cfg$dataset_home), 'clean_data.RData'))
@@ -157,21 +159,23 @@ trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
 
 loginfo(logger = 'main', 'Identified %d genes, %d passed the FDR filter.', before_flt, nrow(trans_eqtls))
 
-snpids = unique(trans_eqtls$snps)
-snpp = c()
-for (i in snpids){
-  if (length(grep('snp', i))>0){
-    snpp = c(snpp, get_var_info_from_maf(dt[[2]]@data, i, eqtl_m[[3]]))
-  } else {
-    snpp = c(snpp, i)
+if (nrow(trans_eqtls) > 0){
+  snpids = unique(trans_eqtls$snps)
+  snpp = c()
+  for (i in snpids){
+    if (length(grep('snp', i))>0){
+      snpp = c(snpp, get_var_info_from_maf(dt[[2]]@data, i, eqtl_m[[3]]))
+    } else {
+      snpp = c(snpp, i)
+    }
   }
+  names(snpp) = snpids
+  trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
+  trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
+  write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'),
+              row.names = F, sep = '\t', quote = F)
+  gc()
 }
-names(snpp) = snpids
-trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
-trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
-write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'),
-            row.names = F, sep = '\t', quote = F)
-gc()
 
 if (!source){
   trans_eqtls = read.table('/Users/jefft/Desktop/p53_project/scripts/eQTL/outputs/tcga_brca_raw_seq/trans_eqtl_fdr005.txt', 
@@ -185,8 +189,8 @@ if (!source){
     facet_wrap(~protein_change, ncol=2)
   
   # per-gene
-  snpid_to_plot = 'hot_spot'
-  gene_to_plot = 'MRPL47'
+  snpid_to_plot = 'breast_w2016'
+  gene_to_plot = 'MEPE'
   
   plot_df = get_single_eqtl_plot_dt(gene_to_plot, snpid_to_plot, dt, as.matrix(snps))
   plot_title = unique(trans_eqtls$protein_change[which(trans_eqtls$snps == snpid_to_plot)])

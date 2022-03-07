@@ -10,25 +10,27 @@ library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
 # setwd('/Users/jefft/Desktop/p53_project')
 # 
-# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
-# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
-# case_complete_nm = 'cases_complete.txt'
-# #exp_nm = 'data_mrna_seq_v2_rsem.txt'
-# exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
-# cna_nm = 'data_cna.txt'
-# mut_nm = 'data_mutations.txt'
-# gene_col_nm = 'Hugo_Symbol'
-# sample_meta_nm = 'data_clinical_sample.txt'
-# patient_meta_nm = 'data_clinical_patient.txt'
-# case_list_dir_nm = 'case_lists'
-# na.str = ''
-# has_log_ed = TRUE
-# rm_low_expr_gene = NULL
-# normalize_genes = NULL
-# quantile_norm = TRUE
-# z_score = FALSE
-# diag_out = NULL
-# filter_protein_coding = NULL
+dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
+dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
+case_complete_nm = 'cases_complete.txt'
+case_complete_nm = 'cases_all.txt'
+#exp_nm = 'data_mrna_seq_v2_rsem.txt'
+exp_nm = 'data_mrna_seq_rpkm.txt'
+exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
+cna_nm = 'data_cna.txt'
+mut_nm = 'data_mutations.txt'
+gene_col_nm = 'Hugo_Symbol'
+sample_meta_nm = 'data_clinical_sample.txt'
+patient_meta_nm = 'data_clinical_patient.txt'
+case_list_dir_nm = 'case_lists'
+na.str = ''
+has_log_ed = FALSE
+rm_low_expr_gene = NULL
+normalize_genes = NULL
+quantile_norm = TRUE
+z_score = FALSE
+diag_out = NULL
+filter_protein_coding = NULL
 
 clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   mtx = mtx[!is.na(mtx[gene_col_nm]),]
@@ -72,8 +74,11 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
                          z_score = FALSE,
                          diag_out = NULL,
                          filter_protein_coding = NULL){
-  
-  loginfo(logger = 'data.loader', 'Not loading CNA data.')
+  if (diploid_norm){
+    loginfo(logger = 'data.loader', 'Planning to normalize sample to diploid ones, loading CNA.')
+  } else {
+    loginfo(logger = 'data.loader', 'Not loading CNA data.')
+  }
   patient_id_col_nm = 'PATIENT_ID'
   complete_cases = read.table(file.path(dataset_home, case_list_dir_nm, case_complete_nm), sep=':')
   complete_cases = trimws(strsplit(complete_cases[nrow(complete_cases),2], '\t')[[1]])
@@ -84,8 +89,6 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
           'Expression matrix dim before cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
   complete_cases = intersect(colnames(exps), complete_cases)  # sometimes, complete cases may not account for expression matrix. 
   
-  #cnas = fread(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
-  #cnas = as.data.frame(cnas)
   sample_meta = read.table(file.path(dataset_home, sample_meta_nm), sep = '\t', comment.char = '#', header = T, quote = '\"', fill=T)
   patient_meta = read.table(file.path(dataset_home, patient_meta_nm), sep = '\t', comment.char = '#', header = T, quote = '\"', fill=T)
   sample_meta = left_join(sample_meta, patient_meta, by = patient_id_col_nm)
@@ -97,26 +100,31 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     exps = exps[which(rownames(exps) %in% genepos$geneid),]
   }
   
-  #cnas = clean_matrix(cnas, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
-  #co_genes = as.character(ordered(intersect(rownames(exps), rownames(cnas))))
-  #exps = exps[co_genes,]
-  #cnas = cnas[co_genes,]
+  if (diploid_norm){
+    cnas = fread(file.path(dataset_home, cna_nm), sep='\t', header = T, na.strings = na.str)
+    cnas = as.data.frame(cnas)
+    complete_cases = intersect(complete_cases, colnames(cnas))
+    cnas = clean_matrix(cnas, complete_cases_dot = complete_cases, gene_col_nm = gene_col_nm)
+    co_genes = as.character(ordered(intersect(rownames(exps), rownames(cnas))))
+    exps = exps[co_genes,complete_cases]
+    cnas = cnas[co_genes,complete_cases]
+  }
+  
   loginfo(logger = 'data.loader',
           'Expression matrix dim after cleaning: %d genes X %d samples.', dim(exps)[1], dim(exps)[2])
   
   ## Normalization and filtering low-expressing genes
   # log2(x+1) if has not been log transformed. NA must has been addressed in above cleaning step.
+  # However, if doing diploid norm, no log2.
   LOG_TRANS = has_log_ed
-  if (!LOG_TRANS){
+  if (!LOG_TRANS & !diploid_norm){
     loginfo('Log2 transforming expression data...', logger = 'data.loader')
     exps = log2(exps + 1)
   }
   
   # Remove low-expressing genes
-  if (!diploid_norm){
     # for normalize by diploid samples, remove low-expressing at last
-    exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
-  }
+  exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
   
   gene_nm = rownames(exps)
   sample_nm = colnames(exps)
@@ -151,7 +159,8 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   
   # Normalize to diploid
   if (diploid_norm){
-    exps = diploid_norm(exps)
+    cnas = cnas[rownames(exps),]
+    exps = norm_exp_to_diploid(cnas, exps)
   }
   
   rownames(exps) = gene_nm
@@ -159,7 +168,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
   exps = as.data.frame(exps)
   
   if (diploid_norm){
-    exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
+    # exps = remove_low_genes(exps, rm_low_expr_gene = rm_low_expr_gene, diag_out = diag_out)
   }
   
   ## Handling mutation data
@@ -268,6 +277,7 @@ align_expression = function(merged_exp, sample_factor){
 norm_exp_to_diploid = function(cnas, exps){
   col_spl = colnames(cnas)
   mask = as.matrix(cnas)
+  exps = as.matrix(exps)
   mask[which(mask!=0)] = NA
   mask[which(mask==0)] = 1
   mask[which(is.na(mask))] = 0
@@ -286,6 +296,7 @@ norm_exp_to_diploid = function(cnas, exps){
 }
 
 
+# Remove low expressing genes
 remove_low_genes = function(exps, rm_low_expr_gene, diag_out=NULL){
   expr_mean = rowMeans(exps)
   if (!is.null(rm_low_expr_gene)){

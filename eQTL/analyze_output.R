@@ -6,26 +6,30 @@ source('utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 
 gc()
-output_dirs = list.files('outputs')
+output_fp = 'outputs/TEST_BRCA'
+output_dirs = list.files(output_fp)
 coll = data.frame()
 for (i in output_dirs){
   if (i == 'readme.txt'){next}
   if (i == 'tcga_luad_raw_seq'){next}
-  trans_eqtls = read.table(file.path('outputs', i, 'trans_eqtl_fdr005.txt'), sep='\t', header = T)
+  trans_eqtls = read.table(file.path(output_fp, i, 'trans_eqtl_fdr005.txt'), sep='\t', header = T)
   trans_eqtls['experiment'] = i
   coll = rbind(coll, trans_eqtls)
 }
 
-coll = coll[grep('tcga', coll$experiment),]
-coll = subset(coll, coll$experiment == 'tcga_brca_raw_seq')
+# coll = coll[grep('tcga', coll$experiment),]
+# coll = subset(coll, coll$experiment == 'tcga_brca_raw_seq')
 
 # Positive controls
-pos_control_genes = list(
-  'cell_cycle' = c('CCNA2', 'CHEK1'),
-  'proteosome' = c('PSMA1', 'PSMC1'),
-  'nucleomtb' = c('GMPS', 'DHFR', 'IMPDH', 'AK2', 'CAD', 'DPYD',
-                  'DTYMK', 'GART', 'RRM2', 'TK1', 'TYMS')
-)
+library(xlsx)
+ctrs = read.xlsx('/Users/jefft/Desktop/p53_project/Thesis/gene_signatures/collection.xlsx', sheetIndex = 1)
+ctrs = na.omit(ctrs)
+pos_control_genes = list()
+for (i in unique(ctrs$Gene_annotation)){
+  sub_ctrs = subset(ctrs, ctrs$Gene_annotation==i)
+  pos_control_genes[[i]] = unique(sub_ctrs$Gene)
+}
+
 pos_ctr_eqtl = subset(coll, coll$gene %in% unlist(pos_control_genes) 
 #                      & abs(coll$beta) > 1
                       )

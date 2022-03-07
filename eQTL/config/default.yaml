@@ -16,7 +16,8 @@ preprocess:
     norm_gene:
     quantile: TRUE
     z_score: FALSE
-    rm_low_expr_gene: -1  # after log(x+1) transform, before normalization
+    diploid_norm: FALSE  # normalize to diploid sample, will use CNA data.
+    rm_low_expr_gene: -1  # after log(x+1) transform, before normalization. If use diploid norm, remove after normlization.
 
 eQTL:
     min_vaf: 0.01
