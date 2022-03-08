@@ -184,7 +184,7 @@ sub_idt = sub_idt[order(sub_idt$beta, decreasing = T),]
 gene_pool = t(assay(dt[[1]][unique(sub_idt$gene),idx_ftd,'RNA']))
 b_m_ftd = b_m[idx_ftd,]
 
-# check which specifci mutation mut+ cells have
+# check which specific mutation mut+ cells have
 sapply(names(b_m_ftd)[which(b_m_ftd=='mut+')], function(x){
   sub_tb = subset(dt[[2]]@data, dt[[2]]@data$Tumor_Sample_Barcode==x &
            dt[[2]]@data$Hugo_Symbol=='TP53')

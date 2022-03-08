@@ -3,7 +3,7 @@ library(data.table)
 
 load_rnai = function(rnai_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/extra_raw/RNAi_D2_combined_gene_dep_scores.csv',
                      hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv',
-                     protein_coding_only = TRUE,){
+                     protein_coding_only = TRUE){
   tb = fread(rnai_fp, sep=',', header = T, na.strings = 'NA', quote = '\"')
   tb = as.data.frame(tb)
   rownames(tb) = sapply(tb$V1, function(x){

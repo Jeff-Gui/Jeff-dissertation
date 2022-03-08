@@ -4,6 +4,7 @@ library(patchwork)
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 source('utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+source('enrich_utils.R')
 
 gc()
 output_fp = 'outputs/TEST_BRCA'
@@ -122,30 +123,8 @@ library(gridExtra)
 #mart = useMart("ensembl", "hsapiens_gene_ensembl")
 #gene_ETR = getBM(attributes = "entrezgene_id", filters = "symbol", values = overlapping_gene, mart = mart)
 
-do_GO = function(df){
-  avg_score = aggregate(beta~gene, df, mean)
-  avg_score = avg_score[order(avg_score$beta, decreasing = T),]
-  overlapping_gene = avg_score$gene
-  gene_ETR = bitr(overlapping_gene, fromType = 'SYMBOL', toType = 'ENTREZID', OrgDb = org.Hs.eg.db)
-  
-  # Any better package?
-  ego = enrichGO(
-    gene  = gene_ETR$ENTREZID,
-    keyType = "ENTREZID", 
-    OrgDb   = org.Hs.eg.db,
-    ont     = "BP",
-    pAdjustMethod = "BH",
-    pvalueCutoff  = 0.01,
-    qvalueCutoff  = 0.05,
-    readable      = TRUE)
-  
-  # barplot(ego, showCategory = 10)
-  dp = dotplot(ego, showCategory = 10)
-  # cnetplot(ego, showCategory = 5)
-  return(dp)
-}
-up = do_GO(overlap_up)
-down = do_GO(overlap_down)
+up = dotplot(do_GO(overlap_up))
+down = dotplot(do_GO(overlap_down))
 
 if (nrow(down$data) == 0){
   plot.list = list('venn'=venn_plt, 'up_GO'=up)

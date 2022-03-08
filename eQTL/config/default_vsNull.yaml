@@ -1,4 +1,4 @@
-experiment_home: /Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg
+experiment_home: /Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-null
 output: # output folder
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018
@@ -29,9 +29,10 @@ eQTL:
     genepos: /  # gene location table specific to the version of genome assembly
     covariate_from_meta: # covariate as columns in the metadata table, comma separated
     covariate_code: # pre-set covariates, e.g. GENO (genotype PCA), EXPR, comma separated
+    mode: mut-VS-null # mut-VS-other: compare sample having mutation to not having; mut-VS-null: compare sample having mutation to none.
     pvOutputThreshold: 5e-2
     pvOutputThreshold_cis: 5e-2
     pvOutputThreshold_tra: 5e-2
     cisDist: 1e6
     model: LINEAR
-    meta_mut: / # a list of tsv file storng meta-mutant information.
+    meta_mut: /  # a tsv file storng meta-mutant information.

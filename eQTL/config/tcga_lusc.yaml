@@ -17,4 +17,5 @@ eQTL:
     covariate_code: GENO
     meta_mut: 
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/LUSC_UMD.txt

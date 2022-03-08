@@ -7,30 +7,43 @@ library(MultiAssayExperiment)
 
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
-                      min_sample_per_snp=0.01, meta_mut_fp=NULL){
+                      min_sample_per_snp=0.01, meta_mut_fp=NULL, mode='mut-VS-other'){
   # MAE: multiassay experiment object list, first object be gene expression and the second be MAF
   # Return Gene expression and SNP slicedData for eQTL mapping
+  # mode: see get_SNP_m_from_maf
   expression = assay(mae[[1]][,,'RNA', drop=FALSE])
   
   rs = get_SNP_m_from_maf(mae[[2]]@data, genes=genes, samples=colnames(expression),
                           sample_col_name = sample_col_name,
                           min_sample_per_snp = min_sample_per_snp,
-                          meta_mut_fp = meta_mut_fp)
+                          meta_mut_fp = meta_mut_fp, mode=mode)
   gene = SlicedData$new()
   snp = SlicedData$new()
   snp = snp$CreateFromMatrix(rs[[2]])
-  gene = gene$CreateFromMatrix(as.matrix(expression))
+  expression = as.matrix(expression)[,colnames(rs[[2]])]
+  gene = gene$CreateFromMatrix(expression)
+  loginfo(logger = 'eQTL_gen_matrix', 'eQTL mapping sample size: %d.', ncol(rs[[2]]))
   return(list('gene'=gene, 'snp'=snp, 'snp_lookup'=rs[[1]]))
+}
+
+
+get_null_samples = function(maf, sample_col_name='Tumor_Sample_Barcode', 
+                            gene='TP53'){
+  # get sample ID that has stop mutation for certain gene
+  maf = subset(maf, maf$Hugo_Symbol==gene)
+  rt = maf[[sample_col_name]][which(maf$Variant_Classification == 'Nonsense_Mutation')]
+  return(as.character(rt))
 }
 
 
 get_SNP_m_from_maf = function(maf, sample_col_name,
                               genes=NULL, samples=NULL,
                               min_sample_per_snp=5,
-                              meta_mut_fp=NULL){
+                              meta_mut_fp=NULL, mode='mut-VS-other'){
   # Get SNP matrix from MAF, also return SNP association table
   # genes: select specific gene list to use (Hugo symbol), if NULL, return all.
   # samples: tumour samples involved, if null will use all samples in maf.
+  # mode: mut-VS-other: contrast mut+ to mut-; mut-VS-null: contrast mut+ to nonsense mutation.
   
   # TODO: classify snp as 0, 1, or 2.
   
@@ -124,6 +137,15 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
     snp_m = t(as.matrix(snp_m))
     rownames(snp_m) = lookup$snpid[1]
   }
+  
+  if (mode == 'mut-VS-null'){
+    null_spl = get_null_samples(maf, gene = 'TP53', sample_col_name = sample_col_name)
+    rm = which((colSums(snp_m) == 0) & (!colnames(snp_m) %in% null_spl))
+    if (length(rm)>0){
+      snp_m = snp_m[,-rm]
+    }
+  }
+  
   return(list('lookup'=lookup, 'SNP_m'=snp_m))
 }
 
@@ -178,7 +200,7 @@ get_var_info_from_maf = function(maf, snpid, lookup){
 }
 
 
-get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps'){
+get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps', doPlot=FALSE){
   # Get eqtl that present in all groups specified
   if (is.null(groups)){
     groups = unique(eqtl_df[[group_col]])
@@ -188,11 +210,16 @@ get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps'){
     sub_eqtl = subset(eqtl_df, eqtl_df[[group_col]] == snp)
     co_eqtl[[snp]] = sub_eqtl$gene
   }
-  co_eqtl = Reduce(intersect, co_eqtl)
-  eqtl_df = subset(eqtl_df, eqtl_df[[group_col]] %in% groups & eqtl_df$gene %in% co_eqtl)
+  co_eqtl_rd = Reduce(intersect, co_eqtl)
+  eqtl_df = subset(eqtl_df, eqtl_df[[group_col]] %in% groups & eqtl_df$gene %in% co_eqtl_rd)
   eqtl_df = eqtl_df[,which(!colnames(eqtl_df) %in% c('statistic', 'FDR'))]
   eqtl_df = eqtl_df[order(eqtl_df$gene, eqtl_df$beta, decreasing = c(F,T)),]
-  return(eqtl_df)
+  if (doPlot){
+    plt = ggvenn::ggvenn(co_eqtl, stroke_color = 'white')
+    return(list(eqtl_df, plt))
+  } else {
+    return(eqtl_df)
+  }
 }
 
 
@@ -272,6 +299,7 @@ annotate_sample_mut = function(maf, sample_col_name = 'Tumor_Sample_Barcode', ge
 
 
 pcs_cfg = function(config){
+  config$output = file.path(config$experiment_home, config$output)
   dt_cfg = config$dataset
   eqtl_cfg = config$eQTL
   preprocess_cfg = config$preprocess
@@ -359,3 +387,25 @@ load_meta_mut = function(meta_mut_fp){
   }
   return(meta_mut)
 }
+
+
+load_eQTL_output = function(dir_home, exclude=NULL){
+  output_dirs = list.files(dir_home)
+  if (!is.null(exclude)){
+    output_dirs = output_dirs[which(!output_dirs %in% exclude)]
+  }
+  coll = list()
+  for (i in output_dirs){
+    fp = file.path(dir_home, i, 'trans_eqtl_fdr005.txt')
+    if (file.exists(fp)){
+      trans_eqtls = read.table(fp, sep='\t', header = T)
+      trans_eqtls['experiment'] = i
+      coll[[i]] = trans_eqtls
+    } else {
+      coll[[i]] = NA
+    }
+  }
+  return(coll)
+}
+
+
