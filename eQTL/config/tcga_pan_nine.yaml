@@ -1,0 +1,13 @@
+output: outputs/tcga_nine_pool
+dataset:
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/foo
+
+eQTL:
+    genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
+    covariate_from_meta: AGE,SEX
+    covariate_code: GENO
+    meta_mut: 
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
+     #- /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
+

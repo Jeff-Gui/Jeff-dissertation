@@ -16,10 +16,7 @@ eQTL:
     covariate_from_meta: AGE,SEX
     covariate_code: GENO
     meta_mut: 
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/OV_UMD.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/ContactCore.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/cons.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
 

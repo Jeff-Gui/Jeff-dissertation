@@ -1,0 +1,37 @@
+experiment_home: /Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult
+output: # output folder
+dataset:
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018
+    case_complete_nm: cases_complete.txt
+    exp_nm: data_mrna_seq_v2_rsem.txt
+    cna_nm: data_cna.txt
+    mut_nm: data_mutations.txt
+    gene_col_nm: Hugo_Symbol
+    sample_meta_nm: data_clinical_sample.txt
+    patient_meta_nm: data_clinical_patient.txt
+    case_list_dir_nm: case_lists
+    has_log_ed: TRUE  # has expression data been log-transformed?
+    na.str: 
+
+preprocess:
+    norm_gene:
+    quantile: TRUE
+    z_score: FALSE
+    diploid_norm: FALSE  # normalize to diploid sample, will use CNA data.
+    rm_low_expr_gene: -1  # after log(x+1) transform, before normalization. If use diploid norm, remove after normlization.
+
+eQTL:
+    min_vaf: 0.01
+    output_file_name_tra: trans_eqtl.txt
+    output_file_name_cis: cis_eqtl.txt
+    maf_sample_col_nm: Tumor_Sample_Barcode # column name in MAF file referring the sample ID.
+    genes: TP53  # which genes SNP located in should be considered, if blank, will consider all SNP. Comma separated.
+    genepos: /  # gene location table specific to the version of genome assembly
+    covariate_from_meta: # covariate as columns in the metadata table, comma separated
+    covariate_code: # pre-set covariates, e.g. GENO (genotype PCA), EXPR, comma separated
+    pvOutputThreshold: 5e-2
+    pvOutputThreshold_cis: 5e-2
+    pvOutputThreshold_tra: 5e-2
+    cisDist: 1e6
+    model: LINEAR
+    meta_mut: / # a list of tsv file storng meta-mutant information.

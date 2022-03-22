@@ -71,7 +71,7 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
                          normalize_genes = NULL,
                          quantile_norm = TRUE,
                          diploid_norm = FALSE,
-                         z_score = FALSE,
+                         z_score = FALSE, real_z_score = FALSE,
                          diag_out = NULL,
                          filter_protein_coding = NULL){
   if (diploid_norm){
@@ -155,6 +155,11 @@ load_data_cbp = function(dataset_home, case_complete_nm = 'cases_complete.txt',
     loginfo('Z-scaling each gene based on rank...', logger = 'data.loader')
     # exps = t(scale(t(exps)))
     exps = t(apply(exps, 1, RankNorm))
+  } else {
+    if (real_z_score){
+      loginfo('Z-scaling each gene', logger = 'data.loader')
+      exps = t(scale(t(exps)))
+    }
   }
   
   # Normalize to diploid

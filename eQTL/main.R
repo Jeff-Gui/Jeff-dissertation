@@ -10,9 +10,10 @@ gc()
 
 # config_name = 'metabric.yaml'
 # tcga_stad.yaml, tcga_hnsc.yaml
+# tcga_pan_nine.yaml
 # ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
-config_name = 'tcga_stad.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
-default_cfg_name = 'default_vsNull.yaml'
+config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
+default_cfg_name = 'default_ult.yaml'
 
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',
@@ -165,10 +166,6 @@ for (config_name in config_names) {
   
   # Checking the results
   trans_eqtls = me$trans$eqtls
-  before_flt = nrow(trans_eqtls)
-  trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
-  
-  loginfo(logger = 'main', 'Identified %d genes, %d passed the FDR filter.', before_flt, nrow(trans_eqtls))
   
   if (nrow(trans_eqtls) > 0){
     snpids = unique(trans_eqtls$snps)
@@ -182,7 +179,14 @@ for (config_name in config_names) {
     }
     names(snpp) = snpids
     trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
+    
+    before_flt = nrow(trans_eqtls)
     trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
+    write.table(trans_eqtls,file.path(config$output, 'trans_eqtl.txt'),
+                row.names = F, sep = '\t', quote = F)
+    
+    trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
+    loginfo(logger = 'main', 'Identified %d genes, %d passed the FDR filter.', before_flt, nrow(trans_eqtls))
     write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'),
                 row.names = F, sep = '\t', quote = F)
     gc()

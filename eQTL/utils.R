@@ -7,16 +7,25 @@ library(MultiAssayExperiment)
 
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
-                      min_sample_per_snp=0.01, meta_mut_fp=NULL, mode='mut-VS-other'){
+                      min_sample_per_snp=0.01, meta_mut_fp=NULL, mode='mut-VS-other',
+                      use_p53_exp = FALSE){
   # MAE: multiassay experiment object list, first object be gene expression and the second be MAF
   # Return Gene expression and SNP slicedData for eQTL mapping
   # mode: see get_SNP_m_from_maf
   expression = assay(mae[[1]][,,'RNA', drop=FALSE])
+  if (use_p53_exp){
+    p53_exp = as.numeric(expression['TP53',])
+    p53_exp = (p53_exp - min(p53_exp)) / (max(p53_exp) - min(p53_exp))
+    names(p53_exp) = colnames(expression)
+  } else {
+    p53_exp = NULL
+  }
   
   rs = get_SNP_m_from_maf(mae[[2]]@data, genes=genes, samples=colnames(expression),
                           sample_col_name = sample_col_name,
                           min_sample_per_snp = min_sample_per_snp,
-                          meta_mut_fp = meta_mut_fp, mode=mode)
+                          meta_mut_fp = meta_mut_fp, mode=mode,
+                          p53_expr = p53_exp)
   gene = SlicedData$new()
   snp = SlicedData$new()
   snp = snp$CreateFromMatrix(rs[[2]])
@@ -39,8 +48,10 @@ get_null_samples = function(maf, sample_col_name='Tumor_Sample_Barcode',
 get_SNP_m_from_maf = function(maf, sample_col_name,
                               genes=NULL, samples=NULL,
                               min_sample_per_snp=5,
-                              meta_mut_fp=NULL, mode='mut-VS-other'){
+                              meta_mut_fp=NULL, mode='mut-VS-other',
+                              p53_expr=NULL){
   # Get SNP matrix from MAF, also return SNP association table
+  # Only consider missense mutation
   # genes: select specific gene list to use (Hugo symbol), if NULL, return all.
   # samples: tumour samples involved, if null will use all samples in maf.
   # mode: mut-VS-other: contrast mut+ to mut-; mut-VS-null: contrast mut+ to nonsense mutation.
@@ -50,6 +61,7 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   meta_mut = load_meta_mut(meta_mut_fp)
   
   maf = as.data.frame(maf)
+  maf = subset(maf, maf$Variant_Classification == 'Missense_Mutation')
   sample_col_id = which(colnames(maf) == sample_col_name)
   maf[,sample_col_id] = as.character(maf[,sample_col_id])
   
@@ -92,7 +104,11 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
         # If no VAF information, assume pure
         snp_m[lookup_vector[nm], sp_name[sp]] = 1
       } else {
-        snp_m[lookup_vector[nm], sp_name[sp]] = maf[sp_idx[sp], 'VAF']
+        if (!is.null(p53_expr)){
+          snp_m[lookup_vector[nm], sp_name[sp]] = 2 * maf[sp_idx[sp], 'VAF'] * p53_expr[sp_idx[sp]]
+        } else {
+          snp_m[lookup_vector[nm], sp_name[sp]] = 2 * maf[sp_idx[sp], 'VAF']
+        }
       }
     }
   }
@@ -200,14 +216,23 @@ get_var_info_from_maf = function(maf, snpid, lookup){
 }
 
 
-get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps', doPlot=FALSE){
+get_intersection_eqtl = function(eqtl_df, groups=NULL, group_col='snps', 
+                                 doPlot=FALSE, check_beta=NULL){
   # Get eqtl that present in all groups specified
+  # check_beta: either NULL, pos or neg, df must has beta column
   if (is.null(groups)){
     groups = unique(eqtl_df[[group_col]])
   }
   co_eqtl = list()
   for (snp in groups){
     sub_eqtl = subset(eqtl_df, eqtl_df[[group_col]] == snp)
+    if (!is.null(check_beta)){
+      if (check_beta == 'pos'){
+        sub_eqtl = subset(sub_eqtl, sub_eqtl$beta > 0)
+      } else {
+        sub_eqtl = subset(sub_eqtl, sub_eqtl$beta < 0)
+      }
+    }
     co_eqtl[[snp]] = sub_eqtl$gene
   }
   co_eqtl_rd = Reduce(intersect, co_eqtl)
@@ -334,14 +359,21 @@ get_binary_SNP_m_from_maf = function(maf, snp_list, snp_col_nm=NULL,
                                      samples = NULL,
                                      gene='TP53', 
                                      sample_col_name='Tumor_Sample_Barcode',
-                                     gene_col_name='Hugo_Symbol', mode='amino_acid'){
+                                     gene_col_name='Hugo_Symbol', mode='amino_acid',
+                                     protein_change_col = 'Protein_Change',
+                                     code_with_VAF = FALSE){
   maf = subset(maf, maf[[gene_col_name]] == gene)
   # mode: if amino_acid, then should be specific mutation.
   # if position, then should be location only.
   if (mode=='position'){
-    ext = sapply(maf[['Protein_Change']], function(x){strsplit(x, split = '\\.')[[1]][2]})
+    ext = sapply(maf[[protein_change_col]], function(x){strsplit(x, split = '\\.')[[1]][2]})
     maf[['position']] = as.numeric(str_extract(ext,"(?<=[A-Z])[0-9]+(?=[A-Z])"))
     snp_col_nm = 'position'
+  } else {
+    if (mode == 'position-tcga'){
+      maf[['position']] = as.numeric(maf$Protein_position)
+      snp_col_nm = 'position'
+    }
   }
   
   snp_list_qc = list()
@@ -357,11 +389,23 @@ get_binary_SNP_m_from_maf = function(maf, snp_list, snp_col_nm=NULL,
     samples = unique(maf[[sample_col_name]])
   }
   m = matrix(0, nrow=length(samples), ncol = length(snp_list_qc))
-  for (i in 1:nrow(m)){
-    sub_maf = subset(maf, maf[[sample_col_name]] == samples[i])
-    for (j in 1:ncol(m)){
-      if (length(intersect(snp_list_qc[[j]], sub_maf[[snp_col_nm]]))>0){
-        m[i,j] = 1
+  if (!code_with_VAF){
+    for (i in 1:nrow(m)){
+      sub_maf = subset(maf, maf[[sample_col_name]] == samples[i])
+      for (j in 1:ncol(m)){
+        if (length(intersect(snp_list_qc[[j]], sub_maf[[snp_col_nm]]))>0){
+          m[i,j] = 1
+        }
+      }
+    }
+  } else {
+    for (i in 1:nrow(m)){
+      sub_maf = subset(maf, maf[[sample_col_name]] == samples[i])
+      for (j in 1:ncol(m)){
+        its = intersect(snp_list_qc[[j]], sub_maf[[snp_col_nm]])
+        if (length(its)>0){
+          m[i,j] = mean(as.numeric(sub_maf[which(sub_maf[[snp_col_nm]] %in% its), 'VAF']))
+        }
       }
     }
   }
@@ -389,18 +433,36 @@ load_meta_mut = function(meta_mut_fp){
 }
 
 
-load_eQTL_output = function(dir_home, exclude=NULL){
+load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL){
+  beta_val = beta
+  # beta: filter absolute effect size
+  if (mode == 'fdr'){
+    nm = 'trans_eqtl_fdr005.txt'
+  } else {
+    nm = 'trans_eqtl.txt'
+  }
   output_dirs = list.files(dir_home)
   if (!is.null(exclude)){
     output_dirs = output_dirs[which(!output_dirs %in% exclude)]
   }
   coll = list()
   for (i in output_dirs){
-    fp = file.path(dir_home, i, 'trans_eqtl_fdr005.txt')
+    fp = file.path(dir_home, i, nm)
     if (file.exists(fp)){
       trans_eqtls = read.table(fp, sep='\t', header = T)
-      trans_eqtls['experiment'] = i
-      coll[[i]] = trans_eqtls
+      if (nrow(trans_eqtls)==0){
+        coll[[i]] = NA
+      } else {
+        trans_eqtls['experiment'] = i
+        if (!is.null(beta_val)){
+          trans_eqtls = subset(trans_eqtls, abs(trans_eqtls$beta) > beta_val)
+        }
+        if (nrow(trans_eqtls)==0){
+          coll[[i]] = NA
+        } else {
+          coll[[i]] = trans_eqtls
+        }
+      }
     } else {
       coll[[i]] = NA
     }

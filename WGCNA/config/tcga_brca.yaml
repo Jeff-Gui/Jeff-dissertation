@@ -6,8 +6,9 @@ dataset:
     na.str: 
 
 preprocess:
-    quantile: TRUE
-    z_score: TRUE
+    quantile: FALSE
+    z_score: FALSE
+    z_score_real: TRUE
     rm_low_expr_gene: 1
     diploid_norm: FALSE
 
@@ -17,9 +18,6 @@ eQTL:
     covariate_code: GENO
     meta_mut: 
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/ContactCore.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/BRCA_UMD.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/cons.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/breast_COSMIC.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
