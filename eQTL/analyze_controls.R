@@ -9,7 +9,7 @@ source('utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 
 gc()
-output_fp = 'outputs/TEST_BRCA'
+# output_fp = 'outputs/TEST_BRCA'
 output_fp = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult/outputs'
 coll = load_eQTL_output(output_fp, mode='fdr-no', exclude = 'tcga_nine_pool')
 if (length(which(is.na(coll))>0)){
@@ -36,6 +36,8 @@ ctrs_raw = read_xlsx('/Users/jefft/Desktop/p53_project/Thesis/gene_signatures/co
 ctrs = na.omit(ctrs_raw)
 ctrs = ctrs[order(ctrs$Gene_annotation),c('Gene', 'Gene_annotation')]
 ctrs = ctrs[-which(duplicated(ctrs)),]
+#wt_ctrs = ctrs[grep('wt', ctrs$Gene_annotation),]
+#ctrs = ctrs[-grep('wt', ctrs$Gene_annotation),]
 ctrs_clean = ctrs
 
 ctrs = ctrs_clean
@@ -55,15 +57,6 @@ for (epr in unique(coll$experiment)){
   }
 }
 
-# coll$ann = NA
-# coll$ann[coll$gene %in% unique(ctrs$Gene)] = 'hit'
-# coll = subset(coll, coll$FDR < 0.05 & coll$experiment=='tcga_brca_raw_seq')
-# ggplot() +
-#   geom_point(data = subset(coll, is.na(coll$ann)), 
-#              aes(x=beta, y=-log10(FDR)),size=0.1) +
-#   geom_point(data = subset(coll, coll$ann == 'hit'),
-#              aes(x=beta, y=-log10(FDR), color='red'), size=2)
-
 ctrs_long = gather(ctrs, key='group', value='value', 3:ncol(ctrs))
 ctr_long = cbind(ctrs_long, t(as.data.frame(strsplit(ctrs_long$group, split = '\\|'))))
 rownames(ctr_long) = NULL
@@ -75,7 +68,7 @@ gene_order = ctrs$Gene[order(ctrs$Gene_annotation, ctrs$Gene)]
 ctr_long$Gene = factor(ctr_long$Gene, gene_order)
 ctr_long['wrong'] = NA
 ctr_long[which(ctr_long$beta<0), 'wrong'] = T
-ctr_long[which(ctr_long$beta>-0), 'wrong'] = F
+ctr_long[which(ctr_long$beta>0), 'wrong'] = F
 
 # ctr_long = subset(ctr_long, ctr_long$mutation %in% names(mutation_to_plt))
 ctr_long$mutation = mutation_to_plt[ctr_long$mutation]
@@ -91,18 +84,24 @@ up_p = ceiling(-log10(min(ctr_long$FDR, na.rm = T)))
 print(up_p)
 sc = scale_colour_gradientn(colours = myPalette(100), 
             limits=c(0, up_p),breaks = seq(0,12,4), trans='log1p')
+
+# WT control or Not !!! Choice
+ctr_long = subset(ctr_long, ctr_long$Gene_annotation!='wt_control')
+ctr_long = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
+
 for (i in unique(ctr_long$experiment)){
   ctr_long_sub = subset(ctr_long, ctr_long$experiment==i)
   g = ggplot(ctr_long_sub) +
     geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
-                   color=-log10(FDR), shape=wrong)) +
-    scale_size_continuous(limits = c(0,ceiling(max(ctr_long$beta, na.rm=T)))) +
+                   color=-log10(FDR), shape=wrong), stroke=2) +
+    scale_shape_manual(name='', label=c('Negative', 'Positive'), limits = c(FALSE, TRUE), values = c(1,2)) +
+    scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long$beta), na.rm=T)))) +
     # facet_rep_wrap(~experiment, ncol = 2, repeat.tick.labels = TRUE) +
     # scale_colour_gradient2(low = "blue", high = "purple", mid = "pink") +
     sc +
     mytme +
     geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
-               aes(x=Gene, y=mutation), shape = '*', size=4, color='palegreen') +
+               aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
     # y = 'Mutation (group)'
     labs(x='', y='', title = i) +
     theme(strip.background = element_rect(fill=NA), 
@@ -118,5 +117,49 @@ for (i in unique(ctr_long$experiment)){
 }
 
 marrangeGrob(grobs=plt.list,ncol=3,nrow=3) %>% 
-  ggsave('/Users/jefft/Desktop/p53_project/Plots/eQTL/controls/TCGA-pan_VS-mutneg_ult-noFDR_test.pdf',
+  ggsave('/Users/jefft/Desktop/p53_project/Plots/eQTL/controls/TCGA-pan_VS-mutneg_ult-noFDR_WTctr_2.pdf',
        plot=., width=11.69*2.4,height=8.27*1.5,units='in',device='pdf',dpi=300)
+
+
+### Contact VS Conform in Esposito, 2022
+source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
+load('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData')
+tcga = dt
+load('/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData')
+ccle = dt
+remove(dt)
+gc()
+
+
+contact_cell = intersect(ccle[[1]]@colData$NAME, 
+                         c('MDA-MB-468','U373MG', 'U-251 MG', 'SF-295', 'HCC193', 'PC9'))
+conform_cell = intersect(ccle[[1]]@colData$NAME, 
+                         c('HCC1395', 'HCC1954', 'SK-MEL-2', 'SK-LMS-1'))
+genes = c('TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
+
+comp = data.frame('name'=c(contact_cell, conform_cell), 'group'=c(rep('contact', 3), rep('conform', 3)))
+comp['ID'] = sapply(comp$name, function(x){ccle[[1]]@colData$PATIENT_ID[which(ccle[[1]]@colData$NAME==x)]})
+comp = cbind(comp, t(assay(ccle[[1]][genes,comp$ID,'RNA'])))
+
+comp = gather(comp, key='gene', value='exp', 4:7)
+ggplot(comp, aes(x=group,y=exp)) +
+  geom_point() +
+  facet_wrap(~gene) +
+  geom_text(aes(label=name)) +
+  mytme
+
+mutation_groups = list(c(273,248), c(175,245,249,282))
+names(mutation_groups) = c('Contact', 'Conform')
+
+genes = c('HMGCR', 'MVK', 'MVD', 'FDPS', 'SQLE', 'LSS', 'DHCR7', 'TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
+plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups, 
+              primary_site = 'Breast', rnai = NULL, 
+              comparison = list('rna'=list(c('Contact', 'Wildtype'),
+                                           c('Conform', 'Contact')),
+                                'rnai'=list(c('Contact', 'Wildtype'))),
+              no_ccle = TRUE)
+plt %>% marrangeGrob(ncol=2, nrow=3, top = '',
+                     layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult/plots/coreVScontact/TEAD_controls.pdf',
+         plot=., width=8,height=16,units='in',device='pdf',dpi=300)
+

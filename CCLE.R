@@ -60,6 +60,11 @@ for (i in names(p53_ann)){
   dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
 }
 
+meta_mut_home = '/Users/jefft/Desktop/p53_project/datasets/meta_muts'
+meta_mut_fp = list.files(meta_mut_home)
+meta_mut_fp = sapply(meta_mut_fp, function(x){return(file.path(meta_mut_home, x))})
+meta_mut = load_meta_mut(meta_mut_fp)
+
 ## Check positive controls
 ### Load controls
 library(xlsx)
@@ -151,10 +156,6 @@ stat_compare_means(comparisons = list(c('missense', 'wildtype'),
 
 ## Check if identified eQTLs are operational in CCLE.
 out_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg/outputs'
-meta_mut_home = '/Users/jefft/Desktop/p53_project/datasets/meta_muts'
-meta_mut_fp = list.files(meta_mut_home)
-meta_mut_fp = sapply(meta_mut_fp, function(x){return(file.path(meta_mut_home, x))})
-meta_mut = load_meta_mut(meta_mut_fp)
 
 ### Analyse breast cancer
 idt_qtl = read.table(file.path(out_home, 'tcga_brca_raw_seq/trans_eqtl_fdr005.txt'),
@@ -246,41 +247,3 @@ if (sum(up_GO@result$p.adjust < 0.05)==0){
 }
 down_GO = do_GO(subset(sub_idt_sig, sub_idt_sig$beta < 0))
 dotplot(down_GO)
-
-# Plot dual-sig genes
-plt.list = list()
-# id_row = which(sub_idt_sig$gene %in% c('MYBL2', 'DPH2', 'DEPDC7', 'LFNG', 'BTG2'))
-id_row = 1:nrow(sub_idt_sig)
-for (i in id_row){
-  plt_df = cbind(t(assay(dt[[1]][sub_idt_sig$gene[i],idx_ftd,'RNA'])), 
-                 b_m[idx_ftd,])
-  plt_df = as.data.frame(plt_df)
-  if (ncol(plt_df)==1){
-    print(paste(sub_idt_sig$gene[i], 'missing from the expression set.'))
-    next
-  }
-  colnames(plt_df) = c('Gene', 'Mut')
-  plt_df$Gene = as.numeric(plt_df$Gene)
-  plt_df_gn = cbind(dt[[1]]@colData[idx_ftd,], plt_df)
-  plt_df_gn = as.data.frame(plt_df_gn)
-  plt_df_gn$cell_nm = sapply(rownames(plt_df_gn), function(x)return(strsplit(x, split='_')[[1]][1]))
-  g = ggplot(plt_df_gn, aes(x=Mut, y=Gene)) + theme_classic() +
-    geom_violin() +
-    stat_compare_means(comparisons = list(c('mut-','mut+'),
-                                          c('mut+', 'null')), method = 't.test') +
-    geom_jitter(size=0.5, width=0.2) +
-    geom_boxplot(width=0.2, outlier.shape = NA) +
-    labs(x=check_mut, y=sub_idt_sig$gene[i]) +
-    geom_text(aes(label=cell_nm, alpha=plt_df_gn$Mut=='mut+'), size=2, nudge_x=0, nudge_y=0.02, angle=30) +
-    scale_alpha_manual(values = c(0,1)) + 
-    theme(legend.position = 'none')
-  plt.list[[sub_idt_sig$gene[i]]] = g
-}
-marrangeGrob(grobs=plt.list,ncol=3,nrow=3) %>% 
-  ggsave(file.path('/Users/jefft/Desktop/p53_project/Plots/eQTL/CCLE', 'CCLE_R248W_from_TCGA_COAD_dual_sig.pdf'),
-         plot=., width=8.27,height=11.69,units='in',device='pdf',dpi=300)
-
-marrangeGrob(grobs=plt.list,ncol=5,nrow=1) %>% 
-  ggsave(file.path('/Users/jefft/Desktop/p53_project/Plots/eQTL/CCLE', 'CCLE_hot_spot_from_TCGA_BRCA_triple_sig.pdf'),
-         plot=., width=13,height=4,units='in',device='pdf',dpi=300)
-

@@ -13,7 +13,7 @@ gc()
 # tcga_pan_nine.yaml
 # ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
 config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
-default_cfg_name = 'default_ult.yaml'
+default_cfg_name = 'default_ult.yaml' # default_ult.yaml default_vsNull.yaml
 
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',
@@ -260,3 +260,7 @@ if (!source){
   expr_test = expr_test[,sample(colnames(expr_test), 10)]
   ggplot(melt(expr_test), aes(x=Var2, y=value)) + geom_boxplot()
 }
+
+
+
+

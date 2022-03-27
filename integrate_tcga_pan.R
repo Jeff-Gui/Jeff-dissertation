@@ -24,6 +24,7 @@ if (!use_cache){
   fle = list.files('datasets')
   coll_rna = list()
   coll_maf = list()
+  gene_cancer = list()
   for (i in fle[grep('[0-9]+-[A-Za-z]+-TCGA', fle)]){
     load(file.path('datasets', i, 'clean_data.RData'))
     ctype = strsplit(i, split='-')[[1]][2]
@@ -33,8 +34,19 @@ if (!use_cache){
     coll_maf[[ctype]] = sub_maf
     dt[[1]]@colData[['ctype']] = ctype
     coll_rna[[ctype]] = dt[[1]]
+    gene_cancer[[ctype]] = rownames(assay(dt[[1]][,,'RNA']))
   }
   gc()
+  # generate tissue-specific gene list
+  pool = unique(Reduce(c, gene_cancer))
+  mtx = matrix(0, nrow=length(pool), ncol=length(coll_rna))
+  rownames(mtx) = pool
+  colnames(mtx) = names(gene_cancer)
+  for (cr in names(gene_cancer)){
+    mtx[gene_cancer[[cr]], cr] = 1
+  }
+  save(mtx, file = 'datasets/TCGA-Pan-Nine/gene_matrix.RData')
+    
   coll_maf = merge_mafs(coll_maf)
   merged_mae = Reduce(merge_mae, coll_rna)
   dt = list(merged_mae, coll_maf)
@@ -60,14 +72,14 @@ library(FactoMineR)
 library(factoextra)
 
 if (use_cache_PCA){
-  load('datasets/TCGA-Pan-Nine/TCGA_pan_nine_clean_data_pca50.RData')
+  load('datasets/TCGA-Pan-Nine/TCGA_pan_nine_clean_data_pca20.RData')
   ind = get_pca_ind(pca.res)
 } else {
   mtx = t(assay(dt[[1]][,,'RNA']))
-  pca.res = PCA(mtx, ncp=50, graph = F)
+  pca.res = PCA(mtx, ncp=20, graph = F)
   ind = get_pca_ind(pca.res)
-  title = strsplit(config_name, split='\\.')[[1]][1]
-  save(pca.res, file = 'datasets/TCGA-Pan-Nine/TCGA_pan_nine_clean_data_pca50.RData')
+  # title = strsplit(config_name, split='\\.')[[1]][1]
+  save(pca.res, file = 'datasets/TCGA-Pan-Nine/TCGA_pan_nine_clean_data_pca20.RData')
 }
 fviz_eig(pca.res, addlabels = T)
 
@@ -78,6 +90,7 @@ library(Rtsne)
 pca.tsne = Rtsne(ind$coord, pca = FALSE)
 df = pca.tsne$Y
 rownames(df) = rownames(ind$coord)
+colnames(df) = c('PC1', 'PC2')
 
 # 2. UMAP
 pca.umap = umap(ind$coord)
@@ -89,7 +102,6 @@ df = data.frame('PC1'=ind$coord[,1], 'PC2'=ind$coord[,2])
 
 meta = data.frame(dt[[1]]@colData)
 df = cbind(df, meta)
-
 # annotate p53
 ann = annotate_sample_mut(dt[[2]]@data)
 df['p53_state'] = NA
