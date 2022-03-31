@@ -14,7 +14,7 @@ meta_mut_fp = sapply(meta_mut_fp,
                      function(x){return(file.path(meta_mut_home, x))})
 meta_mut = load_meta_mut(meta_mut_fp)
 
-gene = 'BCL2L2'
+gene = 'SNAI1'
 primary_site = NULL
 # Central_Nervous_System, Breast, Large intestine
 primary_site = c('Breast') # set to NULL if do Pan
@@ -31,17 +31,23 @@ names(mutation_groups) = c('Hotspots')
 mutation_groups = list(mut_conform, mut_contact)
 names(mutation_groups) = c('HS_conform', 'HS_contact')
 
-mutation_groups = list(meta_mut$aa_pos[which(meta_mut$meta_mut_id=='contact')],
-                       meta_mut$aa_pos[which(meta_mut$meta_mut_id=='core')])
-names(mutation_groups) = c('Contact', 'Core')
+mutation_groups = list(meta_mut$aa_pos[which(meta_mut$meta_mut_id=='conformation')],
+                       meta_mut$aa_pos[which(meta_mut$meta_mut_id=='contact')],
+                       meta_mut$aa_pos[which(meta_mut$meta_mut_id=='sandwich')])
+names(mutation_groups) = c('Conformation', 'Contact', 'Sandwich')
+for (i in 1:length(mutation_groups)){
+  mutation_groups[[i]] = unique(mutation_groups[[i]])
+}
 
+tcga_fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData'
+ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData'
 if (!source){
   # TCGA
   # load('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data_WGCNA.RData')
-  load('/Users/jefft/Desktop/p53_project/datasets/4-COAD-TCGA/clean_data.RData')
+  load(tcga_fp)
   tcga = dt
   # CCLE
-  load('/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData')
+  load(ccle_fp)
   ccle = dt
   remove(dt)
   gc()
@@ -72,14 +78,21 @@ genes = genes$gene
 
 names(table(ccle[[1]]@colData$PRIMARY_SITE))
 plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
-                    primary_site = 'Large_Intestine', rnai = rnai, 
-                    # comparison = list('rna'=list(c('Contact', 'Wildtype'),
-                    #                              c('Contact', 'Core')),
-                    #                'rnai'=list(c('Contact', 'Wildtype')))
+                    primary_site = 'Breast', rnai = rnai,
+                    comparison = list('rna'=list(c('Contact', 'Wildtype'),
+                                                 c('Contact', 'Conformation'),
+                                                 c('Contact', 'Nonsense'),
+                                                 c('Contact', 'Sandwich')),
+                                   'rnai'=list(c('Contact', 'Wildtype'))),
+                    flt_other = T
                     )
-plt %>% marrangeGrob(ncol=2, nrow=3, top = '',
+plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
                      layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
-  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult/plots/coreVScontact/coad_hot_spot.pdf',
-         plot=., width=8,height=16,units='in',device='pdf',dpi=300)
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult/plots/coreVScontact/p53.pdf',
+         plot=., width=12,height=16,units='in',device='pdf',dpi=300)
 
+#---------------- check plot data -----------------
+plt_dt = plt$data[[1]]
+test = subset(plt_dt, plt_dt$db=='CCLE')
+summary(test$gene_rnai[test$p53_state!='Wildtype'], na.rm=T)
 

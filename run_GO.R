@@ -6,9 +6,9 @@ source('utils.R')
 source('enrich_utils.R')
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-null' # TCGA-pan_VS-mutneg_ult
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult' # TCGA-pan_VS-mutneg_ult
 eqtl_out = file.path(dir_home, 'outputs')
-plot_out = file.path(dir_home, 'plots', 'GO')
+plot_out = file.path(dir_home, 'plots', 'GO_MF') # GO or GO_MF
 data_out = file.path(dir_home, 'data_out')
 
 flt_df = function(go_df, cutoff=0.01){
@@ -17,12 +17,16 @@ flt_df = function(go_df, cutoff=0.01){
   return(go_df)
 }
 
-## eQTL mapping outputs
+## !!! Config this!
+mode = 'fdr'
+ont = 'MF'
+go_rs_nm = 'GO_MF_result_no_BG_filter.RData'
 
+## eQTL mapping outputs
 ### Experiment: contrast samples with p53 mutation to those without.
 # does not filter beta here
 beta_cutoff = 0 # 0
-coll = load_eQTL_output(eqtl_out, beta=beta_cutoff, exclude = 'tcga_nine_pool', mode = 'no-fdr')
+coll = load_eQTL_output(eqtl_out, beta=beta_cutoff, exclude = 'tcga_nine_pool', mode = mode)
 study = c()
 map_mut = c()
 num_mut = c()
@@ -120,7 +124,7 @@ if (cache){
       fsx_shot = c('pos', 'pos_TF', 'neg', 'neg_TF')
       for (gp in list(df_up, df_down)){
         if (nrow(gp)>min_gene){
-          up_GO = do_GO(gp, background = bg)
+          up_GO = do_GO(gp, background = bg, ont = 'MF')
           if (is.null(up_GO)){
             msg[cot] = 0
           } else {
@@ -161,33 +165,33 @@ if (cache){
   colnames(result) = c('Experiment', 'Mutation', 'Pos_gene', 'Neg_gene', 'Pos_GO', 'Pos_TF_GO', 'Neg_GO', 'Neg_TF_GO')
   gc()
   result[,3:8] = as.numeric(as.matrix(result[,3:8]))
-  save(go_coll, result, file = file.path(dir_home, 'GO_result_no_BG_filter.RData'))
+  save(go_coll, result, file = file.path(dir_home, go_rs_nm))
   
   ## QC gene ontology, require 5% gene ratio
-  to_remove = c()
-  sign_map = c('pos','neg','pos_TF','neg_TF')
-  names(sign_map) = c('Pos_GO', 'Neg_GO', 'Pos_TF_GO', 'Neg_TF_GO')
-  for (i in 1:nrow(result)){
-    for (j in c('Pos_GO', 'Neg_GO', 'Pos_TF_GO', 'Neg_TF_GO')){
-      if (result[[j]][i] > 0){
-        sign = sign_map[j]
-        cd = paste(result$Experiment[i], result$Mutation[i], sign, sep='-')
-        go_coll[[cd]] = flt_df(go_coll[[cd]], cutoff = 0.05)
-        result[[j]][i] = nrow(go_coll[[cd]])
-        if (nrow(go_coll[[cd]])==0){
-          to_remove = c(to_remove, cd)
-        }
-      }
-    }
-  }
-  if (!is.null(to_remove)){
-    go_coll = go_coll[which(!names(go_coll) %in% to_remove)]
-  }
-  save(go_coll, result, file = file.path(dir_home, 'GO_result.RData'))
+  # to_remove = c()
+  # sign_map = c('pos','neg','pos_TF','neg_TF')
+  # names(sign_map) = c('Pos_GO', 'Neg_GO', 'Pos_TF_GO', 'Neg_TF_GO')
+  # for (i in 1:nrow(result)){
+  #   for (j in c('Pos_GO', 'Neg_GO', 'Pos_TF_GO', 'Neg_TF_GO')){
+  #     if (result[[j]][i] > 0){
+  #       sign = sign_map[j]
+  #       cd = paste(result$Experiment[i], result$Mutation[i], sign, sep='-')
+  #       go_coll[[cd]] = flt_df(go_coll[[cd]], cutoff = 0.05)
+  #       result[[j]][i] = nrow(go_coll[[cd]])
+  #       if (nrow(go_coll[[cd]])==0){
+  #         to_remove = c(to_remove, cd)
+  #       }
+  #     }
+  #   }
+  # }
+  # if (!is.null(to_remove)){
+  #   go_coll = go_coll[which(!names(go_coll) %in% to_remove)]
+  # }
+  # save(go_coll, result, file = file.path(dir_home, 'GO_result.RData'))
 }
 
 
-load(file.path(dir_home, 'GO_result_no_BG_filter.RData'))
+load(file.path(dir_home, go_rs_nm))
 # plot eQTL result
 # print(result)
 result['code'] = sapply(result$Experiment, function(x){

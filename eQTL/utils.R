@@ -471,3 +471,78 @@ load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL){
 }
 
 
+load_clean_data = function(fp, ann_p53=TRUE, ann_bin_mut_list=NULL, mode=NULL, use_VAF_tcga=FALSE,
+                meta_mut_home='/Users/jefft/Desktop/p53_project/datasets/meta_muts/'){
+  # mode: tcga or ccle, if not specified, analyze from fp
+  # load clean data while specifying the mutation state
+  if (is.null(mode)){
+    if (length(grep('tcga',fp, ignore.case = T))>0){
+      mode = 'tcga'
+    } else {
+      mode = 'ccle'
+    }
+  }
+  if (!mode %in% c('tcga', 'ccle')){
+    print('Wrong mode!')
+    return(NULL)
+  }
+  code_with_VAF = FALSE
+  snp_col_nm = 'HGVSp_Short'
+  if (mode == 'tcga'){
+    protein_change_col = 'HGVSp_Short'
+    if (use_VAF_tcga){
+      code_with_VAF = TRUE
+    }
+  } else {
+    protein_change_col = 'Protein_Change'
+  }
+  
+  meta_mut = load_meta_mut(file.path(meta_mut_home, list.files(meta_mut_home)))
+  load(fp)
+  if (ann_p53){
+    p53_ann = annotate_sample_mut(dt[[2]]@data)
+    dt[[1]]@colData[['p53_state']] = 'Wildtype'
+    for (i in names(p53_ann)){
+      dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
+    }
+  }
+  sps = rownames(dt[[1]]@colData)
+  if (!is.null(ann_bin_mut_list)){
+    for (mut in ann_bin_mut_list){
+      if (length(grep('p\\.', mut))>0){
+        b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, snp_list = list(mut),
+                                        protein_change_col = protein_change_col,
+                                        snp_col_nm = snp_col_nm,
+                                        samples = sps, mode = 'amino_acid', code_with_VAF = code_with_VAF)
+      } else {
+        snp_list = unique(unlist(meta_mut$aa_pos[which(meta_mut$meta_mut_id==mut)]))
+        if (length(snp_list)==0){
+          print(paste(mut, 'not found in meta mutant directory.'))
+          next
+        }
+        b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, snp_list = list(snp_list),
+                                        protein_change_col = protein_change_col,
+                                        snp_col_nm = snp_col_nm,
+                                        samples = sps, mode = 'position', code_with_VAF = code_with_VAF)
+      }
+      dt[[1]]@colData[[paste('has_', mut, sep='')]] = 0
+      dt[[1]]@colData[rownames(b_m)[b_m==1],paste('has_', mut, sep='')] = 1
+    }
+  }
+  return(dt)
+}
+
+
+ext_gene_GO = function(gene_lists, do_intersect=FALSE){
+  gls = sapply(gene_lists, function(x){return(strsplit(x, split='/')[[1]])})
+  if (length(gene_lists)==1){
+    return(gls)
+  }
+  if (do_intersect){
+    names(gls) = NULL
+    return(Reduce(intersect, gls))
+  } else {
+    return(unique(unlist(gls)))
+  }
+}
+

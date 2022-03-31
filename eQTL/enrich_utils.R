@@ -82,17 +82,6 @@ load_TRUST_term2gene = function(fp = '/Users/jefft/Desktop/p53_project/datasets/
   term = paste(dt$TF, dt$sign, sep='_')
   term2gene = data.frame('term' = term, 'gene' = dt$target)
   return(term2gene)
-  
-  # Testing. enrichment in BRCA eQTL genes
-  # genes = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg/outputs/tcga_brca_raw_seq/trans_eqtl_fdr005.txt', 
-  #                    sep='\t', header = T)
-  # genes = subset(genes, genes$protein_change == 'hot_spot')
-  # genes_qc = subset(genes, genes$beta > 0)
-  # ern = enricher(genes_qc$gene, TERM2GENE = term2gene, 
-  #                universe = hg19$geneid,
-  #                pvalueCutoff = 0.05)
-  # rs = ern@result
-  # dotplot(ern)
 }
 
 

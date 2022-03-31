@@ -1,10 +1,14 @@
+setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult'
+eqtl_out = file.path(dir_home, 'outputs')
+plot_out = file.path(dir_home, 'plots', 'control')
+data_out = file.path(dir_home, 'data_out')
 library(tidyverse)
 library(pheatmap)
 library(patchwork)
 library(ggpubr)
 library(gridExtra)
 library(RColorBrewer)
-setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 source('utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 
@@ -22,7 +26,7 @@ name_map = read.csv('/Users/jefft/Desktop/p53_project/datasets/mut_name_map.csv'
 mutation_to_plt = name_map$label
 names(mutation_to_plt) = name_map$code
 
-mutation_to_plt = mutation_to_plt[c('hot_spot', 'contact', 'core', 'p.R273H', 'p.R175H', 'breast_w2016')]
+mutation_to_plt = mutation_to_plt[c('hot_spot', 'contact', 'conformation', 'sandwich', 'p.R273H', 'p.R175H', 'breast_w2016')]
 
 all_mut = names(table(coll$protein_change))
 mut_exclude = all_mut[which(!all_mut %in% name_map$code)]
@@ -31,13 +35,23 @@ print(mut_exclude)  # this mutant will not be ploted
 meta_mut_dir = '/Users/jefft/Desktop/p53_project/datasets/meta_muts'
 meta_muts = load_meta_mut(file.path(meta_mut_dir, list.files(meta_mut_dir)))
 
+# load control genes
 library(readxl)
 ctrs_raw = read_xlsx('/Users/jefft/Desktop/p53_project/Thesis/gene_signatures/collection.xlsx')
 ctrs = na.omit(ctrs_raw)
 ctrs = ctrs[order(ctrs$Gene_annotation),c('Gene', 'Gene_annotation')]
 ctrs = ctrs[-which(duplicated(ctrs)),]
-#wt_ctrs = ctrs[grep('wt', ctrs$Gene_annotation),]
-#ctrs = ctrs[-grep('wt', ctrs$Gene_annotation),]
+# check if control genes are expressed
+load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
+mtx = as.data.frame(mtx)
+no_exp = c()
+for (gn in unique(ctrs$Gene)){
+  if (!gn %in% rownames(mtx)){
+    no_exp = c(no_exp, gn)
+  }
+}
+print(paste('Genes not detected:', paste(no_exp, collapse = ',')))
+ctrs = ctrs[which(!ctrs$Gene %in% no_exp),]
 ctrs_clean = ctrs
 
 ctrs = ctrs_clean
@@ -76,9 +90,6 @@ ctr_long$mutation = factor(ctr_long$mutation, levels = mutation_to_plt)
 
 # ctr_long$beta[which(ctr_long$beta <= 1)] = NA
 plt.list = list()
-# normalize beta to 0~1 range for vis comfort
-# ctr_long$beta = 3 *(ctr_long$beta - min(ctr_long$beta, na.rm = T)) / (max(ctr_long$beta, na.rm = T) - min(ctr_long$beta, na.rm = T))
-# myPalette = colorRampPalette(rev(brewer.pal(11, "Spectral")))
 myPalette = colorRampPalette(c("royalblue","purple", "coral"))
 up_p = ceiling(-log10(min(ctr_long$FDR, na.rm = T)))
 print(up_p)
@@ -86,16 +97,17 @@ sc = scale_colour_gradientn(colours = myPalette(100),
             limits=c(0, up_p),breaks = seq(0,12,4), trans='log1p')
 
 # WT control or Not !!! Choice
-ctr_long = subset(ctr_long, ctr_long$Gene_annotation!='wt_control')
-ctr_long = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
+ctr_long_plt = subset(ctr_long, !ctr_long$Gene_annotation %in% c('wt_control', 'wt_control_2'))
+ctr_long_plt = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
+ctr_long_plt = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
 
-for (i in unique(ctr_long$experiment)){
-  ctr_long_sub = subset(ctr_long, ctr_long$experiment==i)
+for (i in unique(ctr_long_plt$experiment)){
+  ctr_long_sub = subset(ctr_long_plt, ctr_long_plt$experiment==i)
   g = ggplot(ctr_long_sub) +
     geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
                    color=-log10(FDR), shape=wrong), stroke=2) +
     scale_shape_manual(name='', label=c('Negative', 'Positive'), limits = c(FALSE, TRUE), values = c(1,2)) +
-    scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long$beta), na.rm=T)))) +
+    scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long_plt$beta), na.rm=T)))) +
     # facet_rep_wrap(~experiment, ncol = 2, repeat.tick.labels = TRUE) +
     # scale_colour_gradient2(low = "blue", high = "purple", mid = "pink") +
     sc +
@@ -117,7 +129,7 @@ for (i in unique(ctr_long$experiment)){
 }
 
 marrangeGrob(grobs=plt.list,ncol=3,nrow=3) %>% 
-  ggsave('/Users/jefft/Desktop/p53_project/Plots/eQTL/controls/TCGA-pan_VS-mutneg_ult-noFDR_WTctr_2.pdf',
+  ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_posCtr.pdf'),
        plot=., width=11.69*2.4,height=8.27*1.5,units='in',device='pdf',dpi=300)
 
 
@@ -160,6 +172,6 @@ plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups,
               no_ccle = TRUE)
 plt %>% marrangeGrob(ncol=2, nrow=3, top = '',
                      layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
-  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult/plots/coreVScontact/TEAD_controls.pdf',
+  ggsave(file.path(plot_out, 'TEAD_controls.pdf'),
          plot=., width=8,height=16,units='in',device='pdf',dpi=300)
 

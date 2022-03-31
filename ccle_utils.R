@@ -57,7 +57,9 @@ load_protein_z_score = function(protein_fp='/Users/jefft/Desktop/p53_project/dat
 
 get_genes_plt = function(genes, ccle, tcga, mutation_groups, 
                          primary_site, rnai=NULL, comparison=NULL,
-                         no_rnai=FALSE, no_ccle=FALSE){
+                         no_rnai=FALSE, no_ccle=FALSE, flt_other=TRUE, no_plot=FALSE){
+  # flt_other: filter mutation not belonging to nonsense, missense or frameshift, or multiple mutations. 
+  # no_plot: remove any plot, return dataframe only.
   source('/Users/jefft/Desktop/Manuscript/set_theme.R')
   # comparison: must be list('rna'=list(), 'rnai'=list())
   #   set to null if no any test
@@ -96,6 +98,7 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
   }
   
   rt_list = list()
+  rt_df_lst = list()
   for (gene in genes){
     ### Visualisation
     ccle[[1]]@colData['gene_expr'] = t(assay(ccle[[1]][gene,,'RNA'])[rownames(ccle[[1]]@colData)])
@@ -132,27 +135,36 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
     # table(df_plt$db)
     # summary(df_plt$gene_rnai)
     df_plt$db = toupper(df_plt$db)
+    if (flt_other){
+      df_plt = subset(df_plt, df_plt$p53_state!='others')
+    }
     if (no_ccle){
       df_plt = subset(df_plt, db=='TCGA')
     }
-    a = ggplot(df_plt, aes(x=itg_state, y=gene_expr)) +
-      geom_violin() +
-      geom_boxplot(width=0.3, outlier.shape = NA) +
-      geom_jitter(width=0.1, alpha=0.7, size=0.5) +
-      mytme +
-      labs(x='p53 state', y=paste(gene, 'expression')) +
-      EnvStats::stat_n_text(fontface = "italic") + 
-      theme(strip.background = element_rect(fill='transparent'),
-            strip.text = element_text(size=12, face='bold'),
-            axis.text.x = element_text(angle=45, hjust = 1))
-    if (!no_ccle){
-      a = a + facet_wrap(~db)
-    }
-    if (!is.null(comparison$rna)){
-      a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test')
+    
+    if (no_plot){
+      a = NULL
+    } else {
+      a = ggplot(df_plt, aes(x=itg_state, y=gene_expr)) +
+        geom_violin() +
+        geom_boxplot(width=0.3, outlier.shape = NA) +
+        geom_jitter(width=0.1, alpha=0.7, size=0.5) +
+        mytme +
+        labs(x='p53 state', y=paste(gene, 'expression')) +
+        EnvStats::stat_n_text(fontface = "italic") + 
+        theme(strip.background = element_rect(fill='transparent'),
+              strip.text = element_text(size=12, face='bold'),
+              axis.text.x = element_text(angle=45, hjust = 1))
+      if (!no_ccle){
+        a = a + facet_wrap(~db)
+      }
+      if (!is.null(comparison$rna)){
+        a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test')
+      }
     }
     
-    if (flag){
+    
+    if (flag & !no_plot){
       b = ggplot(subset(df_plt, df_plt$db=='CCLE' & !is.na(df_plt$gene_rnai)), 
                  aes(x=itg_state, y=gene_rnai)) +
         geom_violin() +
@@ -177,8 +189,13 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
         rt_list[[paste(gene, 'rnai', sep='_')]] = ggplot()
       }
     }
+    rt_df_lst[[gene]] = df_plt
   }
-  return(rt_list)
+  if (!no_plot){
+    return(list('plots'=rt_list, 'data'=rt_df_lst))
+  } else {
+    return(rt_df_lst)
+  }
 }
 
 
