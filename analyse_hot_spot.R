@@ -1,5 +1,7 @@
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult'
+# TCGA-pan_VS-wt, TCGA-pan_VS-mutneg_ult
+ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/processed_dt'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'hotspot')
 data_out = file.path(dir_home, 'data_out')
@@ -23,9 +25,13 @@ for (i in names(coll)){
     df_coll = rbind(df_coll, df)
   }
 }
+df_coll[['cancer']] = sapply(df_coll$experiment, function(x){
+  return(strsplit(x, split='_')[[1]][2])
+})
+df_coll$cancer = toupper(df_coll$cancer)
 
 # Load GO
-load(file.path(dir_home, 'GO_result.RData'))
+load(file.path(dir_home, 'GO_BP_result_no_BG_filter.RData'))
 go_df = data.frame()
 for (i in 1:length(go_coll)){
   nm = names(go_coll)[i]
@@ -43,22 +49,34 @@ go_df['mutation'] = sapply(go_df$experiment,
                            function(x){strsplit(x, split='-')[[1]][2]})
 
 ## Overlapping gene
+library(UpSetR) # upset plot requires sample-group matrix
+# https://blog.csdn.net/tuanzide5233/article/details/83109527
 library(ggvenn)
-exps = c('tcga_blca_raw_seq', 
-         'tcga_brca_raw_seq', 'tcga_lgg_raw_seq', 'tcga_coad_raw_seq')
+#exps = unique(df_coll$experiment)
+exps = c('BLCA', 'STAD', 'BRCA', 'LGG', 'COAD')
 hs = subset(df_coll, df_coll$protein_change=='hot_spot' & 
-              df_coll$experiment %in% exps)
+              df_coll$cancer %in% exps)
+upset_mtx = matrix(0, nrow=length(unique(hs$gene)), ncol=length(exps))
+rownames(upset_mtx) = unique(hs$gene)
+colnames(upset_mtx) = exps
+upset_mtx = as.data.frame(upset_mtx)
 coll_pos_hs = list()
 for (i in exps){
-  nm = toupper(strsplit(i, split = '_')[[1]][2])
-  coll_pos_hs[[nm]] = hs$gene[which(hs$beta > 0 & hs$experiment == i)]
+  hits = hs$gene[which(hs$beta < 0 & hs$cancer == i)]
+  upset_mtx[hits, i] = 1
+  coll_pos_hs[[i]] = hits
 }
+upset_mtx = upset_mtx[-which(rowSums(upset_mtx)==0),]
+
 ggvenn(coll_pos_hs, stroke_color = 'white') %>%
-  ggsave(file.path(plot_out, 'Gene_overlap_hotspot_pos.pdf'),
+  ggsave(file.path(plot_out, 'Gene_overlap_hotspot_neg.pdf'),
          plot=., width=6,height=5,units='in',device='pdf',dpi=300)
 
+pdf(file=file.path(plot_out, "Gene_overlap_US_hotspot_neg.pdf"), onefile=FALSE, width = 18, height = 6)
+upset(upset_mtx, text.scale = c(2,2,2,2,2,2), mb.ratio = c(0.6,0.4))
+dev.off()
+
 ## print overlap among cancers
-# exclude stomach cancer that only has 31 genes
 hs_inter = get_intersection_eqtl(hs, group_col = 'experiment', 
                                  doPlot = F, check_beta = 'pos')
 ups = paste(unique(hs_inter$gene[which(hs_inter$beta > 0)]), collapse = ', ')
@@ -66,8 +84,10 @@ print(paste('Positive related genes in BLCA, BRCA, COAD, LGG by hot spot mutatio
 hs_inter = get_intersection_eqtl(hs, group_col = 'experiment', 
                                  doPlot = F, check_beta = 'neg')
 downs = paste(unique(hs_inter$gene[which(hs_inter$beta < 0)]), collapse = ', ')
-print(paste('Negative related genes in BLCA, BRCA, COAD, LGG by hot spot mutations:', downs))
+print(paste('Negative related genes in BLCA, BRCA, COAD, LGG by hotspot mutations:', downs))
 
+test = do_GO(unique(hs_inter$gene[which(hs_inter$beta > 0)]), 
+             background = hs$gene[which(hs$beta>0)])
 
 ### Test hot spot genes in BRCA in CCLE
 tcga.brca = subset(df_coll, df_coll$protein_change=='hot_spot' & df_coll$experiment=='tcga_brca_raw_seq')
@@ -108,7 +128,7 @@ write.table(ccle.valid, file.path(data_out, 'ccle_breast_hotspotVSwt_TCGA-BRCA-g
 # ccle.valid.tcga = read.table(file.path(data_out, 'ccle_breast_hotspotVSwt_TCGA-BRCA-genes.txt'), header = T)
 
 #==================== Load CCLE valid data =============================
-ccle.valid.all = read.table(file.path(data_out, 'ccle_breast_hotspotVSwt_allgenes.txt'), header = T)
+ccle.valid.all = read.table(file.path(ccle_home, 'ccle_breast_hotspotVSwt_allgenes.txt'), header = T)
 ccle.valid.all[['found.in.tcga']] = F
 ccle.valid.all$found.in.tcga[which(ccle.valid.all$gene %in% tcga.brca$gene)] = T
 
@@ -119,7 +139,7 @@ idx_ist = which(deframe(ccle.valid.all[which(ccle.valid.all$gene %in% co_genes),
 print(length(idx_ist))
 ccle.valid.all['wrong_sign'] = FALSE
 ccle.valid.all[which(ccle.valid.all$gene %in% co_genes[idx_ist]), 'wrong_sign'] = T
-# 1121 of them 
+# 1923 of them 
 ccle.valid.all = ccle.valid.all[!ccle.valid.all$wrong_sign,]
 
 table(ccle.valid.all$found.in.tcga)
@@ -131,17 +151,17 @@ rownames(cross_tb) = c('NOT_FDR_SIG', 'FDR_SIG')
 colnames(cross_tb) = c('NOT_IN_TCGA', 'IN_TCGA')
 chisq.test(cross_tb)
 print(cross_tb)
-# Not considering wrong sign
+# Considering wrong sign mut VS wt
 #              NOT_IN_TCGA  IN_TCGA (59 not detected in CCLE)
-# NOT_FDR_SIG        14363     4921
-# FDR_SIG              128      151
+# NOT_FDR_SIG        11575     5789
+# FDR_SIG               88      188
 # considering wrong sign
 #              NOT_IN_TCGA  IN_TCGA (59 not detected in CCLE)
 # NOT_FDR_SIG        14363     3803
 # FDR_SIG              128      148
 
 odd = (cross_tb[2,2] / cross_tb[1,2]) / (cross_tb[2,1] / cross_tb[1,1])
-print(odd)
+print(odd) # 4.27
 
 # ccle.valid_signf = subset(ccle.valid, ccle.wt.FDR < 0.05)
 # ccle.valid_signf_null = subset(ccle.valid, ccle.wt.FDR < 0.05 & ccle.null.p < 0.05)
@@ -166,9 +186,9 @@ write.table(itg_pos, file.path(data_out, 'TCGA_BRCA-hot_spot-pos-CCLE_sig.txt'),
             sep='\t', quote=F, row.names=F)
 
 itg_neg = subset(itg, beta<0)
-test = do_GO(itg_neg)
-g = dotplot(test)
-ggsave(file.path(dirname(plot_out), 'TCGA_BRCA-hot_spot-neg-CCLE_psig.pdf'),
+test = do_GO(itg_neg, background = bg)
+g = dotplot(test) # nothing
+ggsave(file.path(dirname(plot_out),'hotspot', 'TCGA_BRCA-hot_spot-neg-CCLE_psig.pdf'),
        width=6, height=5, units='in', device='pdf', dpi=300, plot = g)
 write.table(itg, file.path(data_out, 'TCGA_BRCA-hot_spot_CCLE_sig.txt'), sep='\t', quote=F, row.names = F)
 
@@ -180,13 +200,16 @@ itg_sig_null$sig_mul = itg_sig_null$ccle.null.p * itg_sig_null$FDR
 itg_sig_null$dif_mul = abs(itg_sig_null$ccle.null.dif) * abs(itg_sig_null$beta) * ifelse(itg_sig_null$beta > 0, 1,-1)
 itg_sig_null_to_plt = itg_sig_null %>% mutate(lb = gene)
 itg_sig_null_to_plt$lb[abs(itg_sig_null$dif_mul)<=1] = NA
+write.table(itg_sig_null_to_plt, 
+            file.path(data_out, 'TCGA_BRCA-hot_spot_CCLE_null_psig.txt'), sep='\t', quote=F, row.names = F)
 g = ggplot(itg_sig_null_to_plt,aes(x=dif_mul, y=-log10(sig_mul))) +
   geom_point() +
   geom_text_repel(aes(label=lb)) +
-  labs(x = 'Beta (eQTL) * Difference (DE)', y= '-log10(eQTL_FDR * DE_p)') +
+  labs(x = 'Beta (eQTL) * Difference (DE)', y= '-log10(eQTL_FDR * DE_p)', 
+       title =str_wrap('Significant genes Mut:WT in TCGA (eQTL) and Mut:Nonsense in CCLE (DE)', width = 50)) +
   mytme
 
-ggsave(file.path(dirname(plot_out), 'TCGA_BRCA-hot_spot-pos-CCLE_null_psig.pdf'),
+ggsave(file.path(dirname(plot_out), 'hotspot', 'TCGA_BRCA-hot_spot-pos-CCLE_null_psig.pdf'),
        width=8, height=5, units='in', device='pdf', dpi=300, plot = g)
 
 
@@ -223,6 +246,12 @@ for (i in 1:nrow(gene_pool_rnai)){
     }
   }
 }
+# [1] "KLF11"
+#  0.0384017
+#  "PTPRK"
+#  0.02341799
+#  "CEBPB"
+#  0.001786938
 
 ###============= Overlap GO among cancers ====================
 

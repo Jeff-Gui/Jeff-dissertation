@@ -1,6 +1,7 @@
 library(tidyverse)
 library(data.table)
 library(ggpubr)
+library(maftools)
 source('/Users/jefft/Desktop/p53_project/scripts/eQTL/utils.R')
 
 load_rnai = function(rnai_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/extra_raw/RNAi_D2_combined_gene_dep_scores.csv',
@@ -53,6 +54,35 @@ load_protein_z_score = function(protein_fp='/Users/jefft/Desktop/p53_project/dat
   tb_non_dup = tb_non_dup[,-which(colnames(tb_non_dup)=='gene_names')]
   return(tb_non_dup)
 }
+
+
+load_crispr_score = function(fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/raw/CRISPR_gene_effect.txt',
+                            hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv',
+                            sample_meta = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/raw/sample_info.txt',
+                            protein_coding_only=TRUE){
+  tb = fread(fp, sep=',', header = T, na.strings = 'NA', quote = '\"')
+  tb = as.data.frame(tb)
+  colnames(tb) =  sapply(colnames(tb), function(x){
+    return(trimws(strsplit(x, split='\\(')[[1]][1]))
+  })
+  rownames(tb) = tb$DepMap_ID
+  tb = tb[,-1]
+  tb = t(tb)
+  meta = read.table(sample_meta, sep=',', na.strings = '', fill=T, quote = '\\"', header = T)
+  meta = meta[!is.na(meta$CCLE_Name),]
+  nmmap = meta$CCLE_Name
+  names(nmmap) = meta$DepMap_ID
+  tb = tb[,colnames(tb) %in% meta$DepMap_ID]
+  colnames(tb) = nmmap[colnames(tb)]
+  tb = as.data.frame(tb)
+  if (protein_coding_only){
+    # CCLE is aligned to hg19
+    genepos = read.table(hg19_ann, sep='\t', header = T)
+    tb = tb[which(rownames(tb) %in% genepos$geneid),]
+  }
+  return(tb)
+}
+
 
 
 get_genes_plt = function(genes, ccle, tcga, mutation_groups, 
@@ -202,51 +232,24 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
 test_ccle = function(dt, check_mut, genes=NULL, check_site=NULL){
   # dt: ccle MAE object; genes: genes to check
   # check_mut: either name of the meta mutant or protein change p.R273H
-  
-  if (!'p53_state' %in% colnames(dt[[1]]@colData)){
-    p53_ann = annotate_sample_mut(dt[[2]]@data)
-    dt[[1]]@colData[['p53_state']] = 'wildtype'
-    for (i in names(p53_ann)){
-      dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
-    }
-  }
   if (is.null(genes)){
     genes = rownames(assay(dt[[1]][,,'RNA']))
   }
-  
-  # load meta mutant
-  meta_mut_home = '/Users/jefft/Desktop/p53_project/datasets/meta_muts'
-  meta_mut_fp = list.files(meta_mut_home)
-  meta_mut_fp = sapply(meta_mut_fp, 
-                       function(x){return(file.path(meta_mut_home, x))})
-  meta_mut = load_meta_mut(meta_mut_fp)
-  
   idx = rownames(dt[[1]]@colData)
   if (!is.null(check_site)){
     idx_ftd = idx[which(dt[[1]]@colData$PRIMARY_SITE %in% check_site)]
   } else {
     idx_ftd = idx
   }
-  if (length(grep('p\\.', check_mut))==0){
-    mut_aa = unique(meta_mut$aa_pos[meta_mut$meta_mut_id == check_mut])
-    b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
-                                    snp_list = list(mut_aa),
-                                    samples = idx_ftd, 
-                                    mode = 'position')
-  } else {
-    b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
-                                    snp_list = list(check_mut),
-                                    snp_col_nm = 'Protein_Change',
-                                    samples = idx_ftd, 
-                                    mode = 'amino_acid')
-  }
-  mutant = rownames(b_m)[which(b_m==1)]
-  wildtype = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'wildtype')])
-  nonsense = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'nonsense')])
-  print(paste('Mutant samples: ', length(mutant), 
-              ', Wildtype samples: ', length(wildtype), 
-              ', Nonsense samples: ', length(nonsense), sep=''))
+  dt[[1]] = dt[[1]][,idx_ftd,]
+  dt[[2]] = subsetMaf(dt[[2]], tsb = idx_ftd)
   
+  mtx = annotate_mut_group(dt, check_muts = check_mut, as.mtx=FALSE)
+  print(summary(mtx)[,1])
+  
+  wildtype = mtx[['wildtype']]
+  mutant = mtx[[check_mut]]
+  nonsense = mtx[['nonsense']]
   count = c()
   gene_pool = t(assay(dt[[1]][genes,c(wildtype, mutant, nonsense),'RNA']))
   ps = c()

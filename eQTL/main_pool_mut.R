@@ -13,8 +13,7 @@ gc()
 # tcga_pan_nine.yaml
 # ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
 config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
-# default_ult.yaml default_vsNull.yaml default_vsWT.yaml
-default_cfg_name = 'default_ult.yaml'
+default_cfg_name = 'default_vsWT.yaml' # default_ult.yaml default_vsNull.yaml
 
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',
@@ -147,87 +146,51 @@ for (config_name in config_names) {
   names(map) = c('LINEAR', 'ANOVA', 'LINEAR_CROSS')
   useModel = map[eqtl_cfg$model]
   gc()
+  me = Matrix_eQTL_main(
+    snps = snps, 
+    gene = gene, 
+    cvrt = cvrt,
+    output_file_name = file.path(config$output, eqtl_cfg$output_file_name_tra),
+    pvOutputThreshold = as.numeric(eqtl_cfg$pvOutputThreshold_tra),
+    useModel = useModel, 
+    errorCovariance = errorCovariance, 
+    verbose = TRUE, 
+    output_file_name.cis = file.path(config$output, eqtl_cfg$output_file_name_cis),
+    pvOutputThreshold.cis = as.numeric(eqtl_cfg$pvOutputThreshold_cis),
+    snpspos = snpspos, 
+    genepos = genepos,
+    cisDist = as.numeric(eqtl_cfg$cisDist),
+    pvalue.hist = "qqplot",
+    min.pv.by.genesnp = FALSE,
+    noFDRsaveMemory = FALSE)
   
-  ann = annotate_sample_mut(dt[[2]]@data)
-  snps = as.matrix(snps)
-  if (eqtl_cfg$mode=='mut-VS-null'){
-    wt_spl = colnames(snps)[colnames(snps) %in% ann$nonsense]
-  } else {
-    wt_spl = colnames(snps)[!colnames(snps) %in% unlist(ann)]
-  }
-  gene = as.matrix(gene)
-  cvrt = as.matrix(cvrt)
+  # Checking the results
+  trans_eqtls = me$trans$eqtls
   
-  cis_qtls_coll = list()
-  trans_qtls_coll = list()
-  for (i in 1:nrow(snps)){
-    loginfo(logger = 'main', 'Processing mutant %s', rownames(snps)[i])
-    mis_spl = colnames(snps)[which(snps[i,]!=0)]
-    mis_spl = mis_spl[!mis_spl %in% ann$others]
-    loginfo(logger = 'main', 'Mutant # %s, Control # %s', length(mis_spl), length(wt_spl))
-    all_spl = c(wt_spl, mis_spl)
-    sub_snps = t(as.matrix(snps[i,all_spl]))
-    rownames(sub_snps) = rownames(snps)[i]
-    
-    me = Matrix_eQTL_main(
-      snps = SlicedData$new()$CreateFromMatrix(sub_snps), 
-      gene = SlicedData$new()$CreateFromMatrix(gene[,all_spl]), 
-      cvrt = SlicedData$new()$CreateFromMatrix(cvrt[,all_spl]),
-      output_file_name = file.path(config$output, eqtl_cfg$output_file_name_tra),
-      pvOutputThreshold = as.numeric(eqtl_cfg$pvOutputThreshold_tra),
-      useModel = useModel, 
-      errorCovariance = errorCovariance, 
-      verbose = TRUE, 
-      output_file_name.cis = file.path(config$output, eqtl_cfg$output_file_name_cis),
-      pvOutputThreshold.cis = as.numeric(eqtl_cfg$pvOutputThreshold_cis),
-      snpspos = snpspos, 
-      genepos = genepos,
-      cisDist = as.numeric(eqtl_cfg$cisDist),
-      pvalue.hist = "qqplot",
-      min.pv.by.genesnp = FALSE,
-      noFDRsaveMemory = FALSE)
-    
-    # Checking the results
-    trans_eqtls = me$trans$eqtls
-    cis_eqtls = me$cis$eqtls
-    
-    if (nrow(trans_eqtls) > 0){
-      snpids = unique(trans_eqtls$snps)
-      snpp = c()
-      for (j in snpids){
-        if (length(grep('snp', j))>0){
-          snpp = c(snpp, get_var_info_from_maf(dt[[2]]@data, j, eqtl_m[[3]]))
-        } else {
-          snpp = c(snpp, j)
-        }
+  if (nrow(trans_eqtls) > 0){
+    snpids = unique(trans_eqtls$snps)
+    snpp = c()
+    for (i in snpids){
+      if (length(grep('snp', i))>0){
+        snpp = c(snpp, get_var_info_from_maf(dt[[2]]@data, i, eqtl_m[[3]]))
+      } else {
+        snpp = c(snpp, i)
       }
-      names(snpp) = snpids
-      trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
-      
-      before_flt = nrow(trans_eqtls)
-      trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
-      trans_qtls_coll[[i]] = trans_eqtls
-      cis_qtls_coll[[i]] = cis_eqtls
-      loginfo(logger = 'main', 'Identified %d genes, %d passed the FDR filter.', before_flt, sum(trans_eqtls$FDR < 0.05))
     }
-  }
-  trans_qtls_coll = Reduce(rbind, trans_qtls_coll)
-  cis_qtls_coll = Reduce(rbind, cis_qtls_coll)
-  if (nrow(trans_qtls_coll) > 0){
-    write.table(trans_qtls_coll,file.path(config$output, 'trans_eqtl.txt'),
+    names(snpp) = snpids
+    trans_eqtls['protein_change'] = snpp[trans_eqtls$snps]
+    
+    before_flt = nrow(trans_eqtls)
+    trans_eqtls = trans_eqtls[order(trans_eqtls$protein_change, trans_eqtls$FDR),]
+    write.table(trans_eqtls,file.path(config$output, 'trans_eqtl.txt'),
                 row.names = F, sep = '\t', quote = F)
-  }
-  if (nrow(cis_qtls_coll) > 0){
-    write.table(cis_qtls_coll,file.path(config$output, 'cis_eqtl.txt'),
+    
+    trans_eqtls = subset(trans_eqtls, trans_eqtls$FDR < 0.05)
+    loginfo(logger = 'main', 'Identified %d genes, %d passed the FDR filter.', before_flt, nrow(trans_eqtls))
+    write.table(trans_eqtls,file.path(config$output, 'trans_eqtl_fdr005.txt'),
                 row.names = F, sep = '\t', quote = F)
+    gc()
   }
-  loginfo(logger = 'main', 'In total, identified %d genes, %d passed the FDR filter.', nrow(trans_qtls_coll), sum(trans_qtls_coll$FDR < 0.05))
-  trans_qtls_coll = subset(trans_qtls_coll, trans_qtls_coll$FDR < 0.05)
-  if (nrow(trans_qtls_coll) > 0){
-    write.table(trans_qtls_coll,file.path(config$output, 'trans_eqtl_fdr005.txt'),
-                row.names = F, sep = '\t', quote = F)
-  }
-  gc()
 }
 
 if (!source){

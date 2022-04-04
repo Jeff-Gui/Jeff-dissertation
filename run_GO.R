@@ -6,9 +6,10 @@ source('utils.R')
 source('enrich_utils.R')
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-mutneg_ult' # TCGA-pan_VS-mutneg_ult
+# TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
 eqtl_out = file.path(dir_home, 'outputs')
-plot_out = file.path(dir_home, 'plots', 'GO_MF') # GO or GO_MF
+plot_out = file.path(dir_home, 'plots', 'GO') # GO or GO_MF
 data_out = file.path(dir_home, 'data_out')
 
 flt_df = function(go_df, cutoff=0.01){
@@ -18,9 +19,9 @@ flt_df = function(go_df, cutoff=0.01){
 }
 
 ## !!! Config this!
-mode = 'fdr'
-ont = 'MF'
-go_rs_nm = 'GO_MF_result_no_BG_filter.RData'
+mode = 'fdr' # fdr: collect FDR-filtered data
+ont = 'BP'
+go_rs_nm = 'GO_BP_result_no_BG_filter.RData'
 
 ## eQTL mapping outputs
 ### Experiment: contrast samples with p53 mutation to those without.
@@ -75,21 +76,21 @@ g = ggplot(df_coll) +
 ggsave(file.path(dirname(plot_out), 'Volcano_overview.png'),
        plot=g, width=8.27*1.2,height=11.69*0.5,units='in',device='png',dpi=300)
 
-df_coll_hs = subset(df_coll, df_coll$protein_change=='hot_spot')
-ggplot(df_coll) +
-  # geom_hline(yintercept = -log10(0.05), linetype='dotted', color='grey') +
-  geom_point(aes(x=beta, y=-log10(FDR), color=protein_change)) +
-  geom_vline(xintercept = 0.5, linetype='dotted', color='black') +
-  geom_vline(xintercept = -0.5, linetype='dotted', color='black') +
-  facet_wrap(~experiment, scale='free') +
-  mytme + theme(
-    legend.text = element_text(size=10),
-    legend.title = element_blank(),
-    strip.background = element_blank(),
-    strip.text = element_text(size=14, color='black', face='bold'),
-    panel.border = element_rect(color='black', size=1, fill='transparent')
-    #legend.position = 'none'
-  )
+# df_coll_hs = subset(df_coll, df_coll$protein_change=='hot_spot')
+# ggplot(df_coll) +
+#   # geom_hline(yintercept = -log10(0.05), linetype='dotted', color='grey') +
+#   geom_point(aes(x=beta, y=-log10(FDR), color=protein_change)) +
+#   geom_vline(xintercept = 0.5, linetype='dotted', color='black') +
+#   geom_vline(xintercept = -0.5, linetype='dotted', color='black') +
+#   facet_wrap(~experiment, scale='free') +
+#   mytme + theme(
+#     legend.text = element_text(size=10),
+#     legend.title = element_blank(),
+#     strip.background = element_blank(),
+#     strip.text = element_text(size=14, color='black', face='bold'),
+#     panel.border = element_rect(color='black', size=1, fill='transparent')
+#     #legend.position = 'none'
+#   )
 
 ## Gene ontology enrichment and also enrichment of transcription factors
 
@@ -124,7 +125,7 @@ if (cache){
       fsx_shot = c('pos', 'pos_TF', 'neg', 'neg_TF')
       for (gp in list(df_up, df_down)){
         if (nrow(gp)>min_gene){
-          up_GO = do_GO(gp, background = bg, ont = 'MF')
+          up_GO = do_GO(gp, background = bg, ont = ont)
           if (is.null(up_GO)){
             msg[cot] = 0
           } else {
@@ -255,7 +256,7 @@ for (to_plt in list(c('Pos_gene', 'Neg_gene'), c('Pos_GO', 'Neg_GO'))){
   g = ggplot(rs_sub,
              aes(x=Mutation, y=count, fill=gp)) +
     geom_bar(stat = 'identity', position = 'dodge') +
-    facet_wrap(~code, scales = 'free', ncol=1, strip.position = 'right') +
+    facet_wrap(~code, scales = 'free_x', ncol=1, strip.position = 'right') +
     scale_fill_manual(values = c('coral', 'royalblue'), name = '', 
                       labels = c('Positive', 'Negative')) +
     labs(x='', y='Count', title = lb) +
@@ -268,7 +269,7 @@ for (to_plt in list(c('Pos_gene', 'Neg_gene'), c('Pos_GO', 'Neg_GO'))){
           axis.text.y = element_text(face='bold', size=10), 
           strip.text.y = element_text(face='bold', size=14, angle=0),
           ) +
-    scale_y_sqrt(expand = expansion(mult = c(0,0.2)), breaks=c(10,100,1000))
+    scale_y_sqrt(expand = expansion(mult = c(0,0.2)), breaks=c(100,1000,2000))
   plt.list[[count]] = g
   count = count + 1
 }
@@ -291,20 +292,23 @@ for (to_plt in list(c('Pos_gene', 'Neg_gene'), c('Pos_GO', 'Neg_GO'))){
   rs_sub$count = as.numeric(rs_sub$count)
   rs_sub$Mutation = factor(rs_sub$Mutation)
   rs_sub$code = factor(rs_sub$code, levels = c('BRCA', 'COAD', 'LGG', 'BLCA', 'STAD', 'LUSC', 'LUAD', 'HNSC', 'OV'))
+  rs_sub$count_lb = rs_sub$count
+  rs_sub$count_lb[rs_sub$count==0] = NA
   
   g = ggplot(rs_sub,
              aes(x=Mutation, y=count, fill=gp)) +
     geom_bar(stat = 'identity', position = 'dodge') +
-    facet_wrap(~code, scales = 'free', ncol=2, strip.position = 'top') +
+    facet_wrap(~code, scales = 'free_x', ncol=2, strip.position = 'top') +
     scale_fill_manual(values = c('coral', 'royalblue'), name = '', 
                       labels = c('Positive', 'Negative')) +
-    scale_y_sqrt(expand = c(0,0), breaks=c(1,10,100,1000)) +
+    scale_y_sqrt(expand = expansion(mult = c(0,0.2)), breaks=c(10,100,1000)) +
+    geom_text(aes(label=count_lb), position = position_dodge(width=0.9), vjust=-0.5, size=3) +
     labs(x='', y='Count', title = lb) +
     mytme +
     theme(strip.background = element_blank(),
+          strip.text = element_text(face='bold', size=14, angle=0),
           axis.text.y = element_text(size=10, face='bold'),
           axis.text.x = element_text(angle=45, hjust = 1, size=10),
-          strip.text.y = element_text(face='bold', size=10, angle=0),
     )
   plt.list[[count]] = g
   count = count + 1

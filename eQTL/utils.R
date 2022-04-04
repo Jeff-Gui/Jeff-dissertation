@@ -61,6 +61,7 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   meta_mut = load_meta_mut(meta_mut_fp)
   
   maf = as.data.frame(maf)
+  null_spl = get_null_samples(maf, gene = 'TP53', sample_col_name = sample_col_name)
   maf = subset(maf, maf$Variant_Classification == 'Missense_Mutation')
   sample_col_id = which(colnames(maf) == sample_col_name)
   maf[,sample_col_id] = as.character(maf[,sample_col_id])
@@ -105,9 +106,9 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
         snp_m[lookup_vector[nm], sp_name[sp]] = 1
       } else {
         if (!is.null(p53_expr)){
-          snp_m[lookup_vector[nm], sp_name[sp]] = 2 * maf[sp_idx[sp], 'VAF'] * p53_expr[sp_idx[sp]]
+          snp_m[lookup_vector[nm], sp_name[sp]] = maf[sp_idx[sp], 'VAF'] * p53_expr[sp_idx[sp]]
         } else {
-          snp_m[lookup_vector[nm], sp_name[sp]] = 2 * maf[sp_idx[sp], 'VAF']
+          snp_m[lookup_vector[nm], sp_name[sp]] = maf[sp_idx[sp], 'VAF']
         }
       }
     }
@@ -155,8 +156,8 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   }
   
   if (mode == 'mut-VS-null'){
-    null_spl = get_null_samples(maf, gene = 'TP53', sample_col_name = sample_col_name)
     rm = which((colSums(snp_m) == 0) & (!colnames(snp_m) %in% null_spl))
+    print(length(rm))
     if (length(rm)>0){
       snp_m = snp_m[,-rm]
     }
@@ -545,4 +546,61 @@ ext_gene_GO = function(gene_lists, do_intersect=FALSE){
     return(unique(unlist(gls)))
   }
 }
+
+
+annotate_mut_group = function(dt, check_muts, as.mtx=TRUE){
+  # Wrapper of get binrary mutation result
+  # get bulk mutation state at the same time.
+  if (!'p53_state' %in% colnames(dt[[1]]@colData)){
+    p53_ann = annotate_sample_mut(dt[[2]]@data)
+    dt[[1]]@colData[['p53_state']] = 'Wildtype'
+    for (i in names(p53_ann)){
+      dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
+    }
+  }
+  
+  # load meta mutant
+  meta_mut_home = '/Users/jefft/Desktop/p53_project/datasets/meta_muts'
+  meta_mut_fp = list.files(meta_mut_home)
+  meta_mut_fp = sapply(meta_mut_fp, 
+                       function(x){return(file.path(meta_mut_home, x))})
+  meta_mut = load_meta_mut(meta_mut_fp)
+  
+  idx_ftd = rownames(dt[[1]]@colData)
+  others = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'others')])
+  rt_list = list('others'=others)
+  for (check_mut in check_muts){
+    if (length(grep('p\\.', check_mut))==0){
+      mut_aa = unique(meta_mut$aa_pos[meta_mut$meta_mut_id == check_mut])
+      b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
+                                      snp_list = list(mut_aa),
+                                      samples = idx_ftd, 
+                                      mode = 'position')
+    } else {
+      b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
+                                      snp_list = list(check_mut),
+                                      snp_col_nm = 'Protein_Change',
+                                      samples = idx_ftd, 
+                                      mode = 'amino_acid')
+    }
+    mutant = rownames(b_m)[which(b_m==1)]
+    mutant = mutant[!mutant %in% others]
+    rt_list[[check_mut]] = mutant
+  }
+  rt_list[['wildtype']] = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'Wildtype')])
+  rt_list[['nonsense']] = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'nonsense')])
+  if (!as.mtx){
+    return(rt_list)
+  } else {
+    mtx = matrix(0, nrow=length(unique(unlist(rt_list))), ncol=length(names(rt_list)))
+    rownames(mtx) = unique(unlist(rt_list))
+    colnames(mtx) = names(rt_list)
+    mtx = as.data.frame(mtx)
+    for (i in names(rt_list)){
+      mtx[rt_list[[i]], i] = 1
+    }
+    return(mtx)
+  }
+}
+
 

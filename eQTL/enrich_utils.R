@@ -158,7 +158,7 @@ get_DEG = function(x, gene_nm='gene', es_nm='beta',
 }
 
 
-do_GSEA = function(gene, kegg_fp = '/Users/jefft/Genome/c2.cp.kegg.v7.4.symbols.gmt',
+do_GSEA = function(gene, kegg_fp = '/Users/jefft/Genome/c2.cp.kegg.v7.5.1.symbols.gmt',
                    rank_nm = 'beta', gene_nm = 'gene'){
   if (typeof(gene)=='list'){
     gene = gene[order(gene[[rank_nm]], decreasing = T),]
