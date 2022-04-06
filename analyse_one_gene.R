@@ -98,7 +98,7 @@ plt = get_genes_plt(genes, ccle, tcga, mutation_groups,
                     )
 plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
                      layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
-  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/BRCA_test.pdf',
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/BRCA_triple_sig.pdf',
          plot=., width=12,height=16,units='in',device='pdf',dpi=300)
 
 #---------------- check plot data -----------------

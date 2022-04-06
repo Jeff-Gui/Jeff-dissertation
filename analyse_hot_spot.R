@@ -1,6 +1,7 @@
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 # TCGA-pan_VS-wt, TCGA-pan_VS-mutneg_ult
-ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/processed_dt'
+# ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/processed_dt'
+ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd'
 dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'hotspot')
@@ -8,12 +9,13 @@ data_out = file.path(dir_home, 'data_out')
 source('utils.R')
 source('enrich_utils.R')
 source('../ccle_utils.R')
+source('../overlap_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 library(tidyverse)
 library(stringr)
 library(ggrepel)
 
-# Load Gene
+# Load Gene ========
 beta_cutoff = 0
 coll = load_eQTL_output(eqtl_out, beta=beta_cutoff, exclude = 'tcga_nine_pool')
 df_coll = data.frame()
@@ -30,7 +32,7 @@ df_coll[['cancer']] = sapply(df_coll$experiment, function(x){
 })
 df_coll$cancer = toupper(df_coll$cancer)
 
-# Load GO
+# Load GO ========
 load(file.path(dir_home, 'GO_BP_result_no_BG_filter.RData'))
 go_df = data.frame()
 for (i in 1:length(go_coll)){
@@ -48,7 +50,7 @@ go_df[grep('pos', go_df$experiment), 'sign'] = 'pos'
 go_df['mutation'] = sapply(go_df$experiment,
                            function(x){strsplit(x, split='-')[[1]][2]})
 
-## Overlapping gene
+# Overlapping gene ========
 library(UpSetR) # upset plot requires sample-group matrix
 # https://blog.csdn.net/tuanzide5233/article/details/83109527
 library(ggvenn)
@@ -89,9 +91,120 @@ print(paste('Negative related genes in BLCA, BRCA, COAD, LGG by hotspot mutation
 test = do_GO(unique(hs_inter$gene[which(hs_inter$beta > 0)]), 
              background = hs$gene[which(hs$beta>0)])
 
-### Test hot spot genes in BRCA in CCLE
+
+### Test hot spot genes in BRCA in CCLE ========
 tcga.brca = subset(df_coll, df_coll$protein_change=='hot_spot' & df_coll$experiment=='tcga_brca_raw_seq')
-### Can also simply take overlapping with the CCLE
+
+#### load control genes
+library(readxl)
+ctrs_raw = read_xlsx('/Users/jefft/Desktop/p53_project/Thesis/gene_signatures/collection.xlsx')
+ctrs = na.omit(ctrs_raw)
+ctrs = ctrs[order(ctrs$Gene_annotation),c('Gene', 'Gene_annotation')]
+ctrs = ctrs[-which(duplicated(ctrs)),]
+ctrs = ctrs[-grep('wt', ctrs$Gene_annotation),]
+pos.ctrs = ctrs$Gene
+
+#### load TCGA-BRCA hotspot VS nonsense (p sig, no p adj)
+tcga.brca.ns = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-null/outputs/tcga_brca_raw_seq/trans_eqtl.txt', header = T)
+tcga.brca.ns = tcga.brca.ns[tcga.brca.ns$protein_change=='hot_spot',]
+tcga.ns.up = tcga.brca.ns$gene[tcga.brca.ns$beta > 0]
+#### load pre-computed CCLE BRCA test
+ccle.brca = read.table(file.path(CCLE_home, 'BRCA/hotspot_comp.txt'), sep='\t', header = T)
+#### load literature control
+known_target = read.table('/Users/jefft/Desktop/p53_project/datasets/Fischer2017/TableS2.txt', header = T)
+#### load H1299 R273H ChIP-seq
+peaks = read.table('/Users/jefft/Desktop/p53_project/datasets/PRJEB20314/p53-1-2-merged_Peaks.txt', header = T)
+
+known_wt_up = known_target$Gene.Symbol[known_target$sum.direct.regulation.score...16..0..16. >= 2]
+known_wt_down = known_target$Gene.Symbol[known_target$sum.direct.regulation.score...16..0..16. <= -2]
+mean_chek1 = mean(peaks$mean_ern.rep1[peaks$gene=='CHEK1'], peaks$mean_ern.rep2[peaks$gene=='CHEK1'])
+peaks = na.omit(peaks)
+peak_over_chek1 = peaks$gene[rowMeans(as.matrix(peaks[,c('mean_ern.rep1', 'mean_ern.rep2')])) >= mean_chek1]
+tcga.up = tcga.brca$gene[tcga.brca$beta > 0]
+ccle.brca.mask = ccle.brca
+ccle.brca.mask[is.na(ccle.brca.mask)] = 0
+ccle.rna.up = ccle.brca.mask$gene[ccle.brca.mask$rna_hs.wt_dif > 0 & ccle.brca.mask$rna_hs.wt_p < 0.05]
+ccle.rnai.down = ccle.brca.mask$gene[ccle.brca.mask$rnai_hs.wt_dif < 0 & ccle.brca.mask$rnai_hs.wt_p < 0.05]
+ccle.crispr.down = ccle.brca.mask$gene[ccle.brca.mask$crispr_hs.wt_dif < 0 & ccle.brca.mask$crispr_hs.wt_p < 0.05] # nothing if use padj
+ccle.rna.up.null = ccle.brca.mask$gene[ccle.brca.mask$rna_hs.ns_dif > 0 & ccle.brca.mask$rna_hs.ns_p < 0.05]
+
+mylist = list('pos.ctrs' = pos.ctrs,
+              'tcga.up' = tcga.up, 
+              # 'tcga.ns.up' = tcga.ns.up,
+              'ccle.rna.up' = ccle.rna.up, 'ccle.rna.ns.up' = ccle.rna.up.null,
+              'ccle.rnai.down' = ccle.rnai.down, 'ccle.crispr.down' = ccle.crispr.down,
+              'known_wt_up' = known_wt_up, 'known_wt_down' = known_wt_down,
+              'peaks_over_chek1' = peak_over_chek1)
+
+library(ComplexUpset)
+um = gen_upSet_mtx(mylist)
+um = um[um$known_wt_up==0 & um$known_wt_down==0,]
+um = um[,-which(colnames(um) %in% c('known_wt_up', 'known_wt_down'))]
+print(colSums(um))
+
+#pdf(file=file.path(plot_out, 'upset_brca.pdf'), width=12, height=6)
+#dev.off()
+
+# https://krassowski.github.io/complex-upset/articles/Examples_R.html
+g = upset(um[rowSums(um)>=1,], colnames(um), min_size = 1, width_ratio = 0.2,
+      sort_intersections_by = 'degree', sort_intersections = 'ascending',
+      queries = list(upset_query(set='pos.ctrs', color='coral', fill='coral'),
+                     upset_query(set='tcga.up', color='royalblue', fill='royalblue'),
+                     upset_query(intersect=c('tcga.up', 'peaks_over_chek1'), fill='orange', color='orange'),
+                     upset_query(intersect=c('tcga.up', 'ccle.rna.up'), fill='orange', color='orange'),
+                     upset_query(intersect=c('tcga.up', 'ccle.rna.up', 'ccle.rna.ns.up'), fill='orange', color='orange'),
+                     upset_query(intersect=c('tcga.up', 'peaks_over_chek1', 'ccle.rna.up'), fill='orange', color='orange')),
+      base_annotations=list(
+        'Intersection size'=intersection_size(
+          mode = 'inclusive_intersection',
+          text=list(vjust=-0.1,hjust=0,angle=45,size=3),
+          #mapping=aes(fill=mpaa),
+          text_colors=c(on_background='brown', on_bar='coral'))
+          + annotate(
+            geom='text', x=Inf, y=Inf,
+            label=paste('Total genes:', nrow(um)),
+            vjust=1, hjust=1
+          ))
+      )
+ggsave(file.path(plot_out, 'upset.pdf'),
+       plot=g, width=11.69*1.2,height=8.27*0.7,units='in',device='pdf',dpi=300)
+
+
+### Shuffle upset matrix, how many observed is significant? ====
+print(colnames(um))
+# T: must be 1, F: must be 0, NA: no matter. 
+test_condition = c(F, T, T, NA, NA, NA, NA)
+overlap_stat = run_overlap_test(um, test_condition = test_condition, n_loop = 1000)
+
+### Enrichment analysis ====
+load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
+mtx = as.data.frame(mtx)
+bg = rownames(mtx)[which(mtx$BRCA==1)]
+# TCGA RNA (vs WT), CCLE RNA (vs WT), H1299 ChIP, CCLE RNA (vs Null)
+# qua_gene = rownames(um)[get_idx_condt(um, test_condition = c(T,T,T,NA,NA,T))] # 21 genes
+# TCGA RNA (vs WT), CCLE RNA (vs WT), H1299 ChIP
+trip_gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,T))] # 96 genes
+trip_gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,T,NA,NA,NA))] # 100 genes
+# TCGA RNA and H1299 ChIP (no CCLE)
+dual_gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,NA,NA,T))] # 620 genes
+dual_gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,NA))] # 547 genes
+
+# test = do_GO(qua_gene, background = bg, ont='BP')
+test = do_GO(trip_gene, background = bg, ont='BP')
+dotplot(test)
+test@result$geneID[1]
+test = do_GO(dual_gene, background = bg)
+g = dotplot(test)
+ggsave(file.path(plot_out, 'TCGA_BRCA-hot_spot-pos-CCLE_psig_GO.pdf'),
+       width=8, height=8, units='in', device='pdf', dpi=300, plot = g)
+
+tcga.brca_test = subset(tcga.brca, tcga.brca$gene %in% trip_gene)
+
+
+
+
+
+# Archived ====
 # load CCLE
 load('/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData')
 p53_ann = annotate_sample_mut(dt[[2]]@data)
@@ -99,7 +212,6 @@ dt[[1]]@colData[['p53_state']] = 'Wildtype'
 for (i in names(p53_ann)){
   dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
 }
-
 
 # generate ccle valid hotspot VS wildtype
 check_site = 'Breast'
@@ -127,7 +239,7 @@ write.table(ccle.valid, file.path(data_out, 'ccle_breast_hotspotVSwt_TCGA-BRCA-g
 
 # ccle.valid.tcga = read.table(file.path(data_out, 'ccle_breast_hotspotVSwt_TCGA-BRCA-genes.txt'), header = T)
 
-#==================== Load CCLE valid data =============================
+## Load CCLE valid data =============================
 ccle.valid.all = read.table(file.path(ccle_home, 'ccle_breast_hotspotVSwt_allgenes.txt'), header = T)
 ccle.valid.all[['found.in.tcga']] = F
 ccle.valid.all$found.in.tcga[which(ccle.valid.all$gene %in% tcga.brca$gene)] = T
@@ -253,7 +365,7 @@ for (i in 1:nrow(gene_pool_rnai)){
 #  "CEBPB"
 #  0.001786938
 
-###============= Overlap GO among cancers ====================
+## Overlap GO among cancers ====================
 
 ### Intersect among cancers
 gl = load_GO_out(exp_home = exp_home, gene_ratio_min = 0)

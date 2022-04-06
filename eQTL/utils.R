@@ -314,11 +314,12 @@ annotate_sample_mut = function(maf, sample_col_name = 'Tumor_Sample_Barcode', ge
   pool = c(mis_sample, non_sample, fsv_sample)
   others = pool[which(duplicated(pool))]
   big_pool = unique(maf[[sample_col_name]])
-  others = c(others,  big_pool[which(!big_pool %in% pool)])
+  dup_spl = maf[[sample_col_name]][which(duplicated(maf[[sample_col_name]]))]
+  others = unique(c(others,  big_pool[which(!big_pool %in% pool)], dup_spl))
   return(list(
-    'missense' = mis_sample,
-    'nonsense' = non_sample,
-    'frameshift' = fsv_sample,
+    'missense' = setdiff(mis_sample, others),
+    'nonsense' = setdiff(non_sample, others),
+    'frameshift' = setdiff(fsv_sample, others),
     'others' = others
   ))
 }
