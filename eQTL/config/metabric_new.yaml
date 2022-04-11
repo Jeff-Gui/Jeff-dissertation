@@ -1,0 +1,24 @@
+output: outputs/metabric_raw_its
+dataset:
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/METABRIC/brca_metabric
+    exp_nm: data_mrna_agilent_microarray.txt
+    has_log_ed: TRUE
+#    exp_nm: data_mrna_agilent_microarray_zscores_ref_diploid_samples.txt
+    na.str: NA
+
+preprocess:
+#    norm_gene: GAPDH,ACTB
+    quantile: TRUE
+    z_score: TRUE
+    rm_low_expr_gene: 1
+
+eQTL:
+    genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg18_gene_table_autosome.tsv
+#    covariate_from_meta: ER_STATUS,PR_STATUS,AGE_AT_DIAGNOSIS,SEX
+    covariate_from_meta: AGE_AT_DIAGNOSIS,SEX
+    covariate_code: GENO
+    meta_mut:
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/ContactCore.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/BRCA_UMD.txt

@@ -101,6 +101,20 @@ plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
   ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/BRCA_triple_sig.pdf',
          plot=., width=12,height=16,units='in',device='pdf',dpi=300)
 
+# Control genes conflicting to the literature ====
+mycomp = list('rna'=list(c('Hotspots', 'Wildtype'), c('Nonsense', 'Wildtype')),
+              'rnai' = list(c('Hotspots', 'Wildtype')))
+genes = c('BAG1', 'IGF1R', 'IGF2')
+plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
+                    primary_site = 'Breast', rnai = rnai,
+                    comparison = mycomp, no_rnai = T, no_ccle = T,
+                    flt_other = T
+)
+
+plt$plots %>% marrangeGrob(ncol=3, nrow=1, top = '') %>%
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/control/BRCA_conflict_control.pdf',
+         plot=., width=8.27*1.2,height=11.69*0.4,units='in',device='pdf',dpi=300, bg='transparent')
+
 #---------------- check plot data -----------------
 plt_dt = plt$data
 test = subset(plt_dt, plt_dt$db=='CCLE')

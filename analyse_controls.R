@@ -10,7 +10,9 @@ library(patchwork)
 library(ggpubr)
 library(gridExtra)
 library(RColorBrewer)
+library(ggsci)
 source('utils.R')
+source('../ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 
 gc()
@@ -27,7 +29,12 @@ name_map = read.csv('/Users/jefft/Desktop/p53_project/datasets/mut_name_map.csv'
 mutation_to_plt = name_map$label
 names(mutation_to_plt) = name_map$code
 
-mutation_to_plt = mutation_to_plt[c('hot_spot', 'contact', 'conformation', 'sandwich', 'p.R273H', 'p.R175H', 'breast_w2016')]
+mutation_to_plt = mutation_to_plt[c('hot_spot', 'contact', 'conformation', 'sandwich', 'p.R273H', 'p.R175H', 'breast_w2016')] # 
+detected_exp = list()
+for (ep in unique(coll$experiment)){
+  detected_exp[[ep]] = intersect(mutation_to_plt, mutation_to_plt[unique(subset(coll, coll$experiment==ep)$protein_change)])
+}
+
 
 all_mut = names(table(coll$protein_change))
 mut_exclude = all_mut[which(!all_mut %in% name_map$code)]
@@ -51,6 +58,7 @@ for (gn in unique(ctrs$Gene)){
     no_exp = c(no_exp, gn)
   }
 }
+# CXCL8,SUSD6,TIGAR,PTCHD4
 print(paste('Genes not detected:', paste(no_exp, collapse = ',')))
 print(length(no_exp))
 ctrs = ctrs[which(!ctrs$Gene %in% no_exp),]
@@ -81,7 +89,7 @@ ctr_long = ctr_long[,-which(colnames(ctr_long)=='group')]
 ctr_long = spread(ctr_long, key=type, value=value)
 
 gene_order = ctrs$Gene[order(ctrs$Gene_annotation, ctrs$Gene)]
-ctr_long$Gene = factor(ctr_long$Gene, gene_order)
+ctr_long$Gene = factor(ctr_long$Gene, unique(gene_order))
 ctr_long['wrong'] = NA
 ctr_long[which(ctr_long$beta<0), 'wrong'] = T
 ctr_long[which(ctr_long$beta>0), 'wrong'] = F
@@ -91,16 +99,12 @@ ctr_long$mutation = mutation_to_plt[ctr_long$mutation]
 ctr_long$mutation = factor(ctr_long$mutation, levels = mutation_to_plt)
 
 # ctr_long$beta[which(ctr_long$beta <= 1)] = NA
-plt.list = list()
-myPalette = colorRampPalette(c("royalblue","purple", "coral"))
-up_p = ceiling(-log10(min(ctr_long$FDR, na.rm = T)))
-print(up_p)
-sc = scale_colour_gradientn(colours = myPalette(100), 
-            limits=c(0, up_p),breaks = seq(0,12,4), trans='log1p')
 
 ctr_long$cancer = toupper(sapply(ctr_long$experiment, function(x){return(strsplit(x, split='_')[[1]][2])}))
 
-# see how many genes cen be recovered in each cancer, hotspot only
+# see how many genes cen be recovered in each cancer, hotspot only ====
+xtme = theme(axis.text.x = element_text(angle=45, size=12, vjust = 0.7),
+             legend.text = element_text(size=12))
 #### wt control one
 ctr1 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
 ctr1 = ctr1[ctr1$mutation=='Hotspots',]
@@ -109,6 +113,8 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                         wrong_hit=length(which(wrong==FALSE)),
                                         not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
+print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
+print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
 ftr_ctr1 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr1)
@@ -116,8 +122,9 @@ ctr1_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Negative control 1') +
-  mytme
+  labs(y='Count', x='', title='Negative controls 1') +
+  scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
+  mytme + xtme
 sm_tb_ctr1 = sm_tb[sm_tb$gp=='hit',]
 
 #### wt control 2
@@ -128,6 +135,8 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                                 wrong_hit=length(which(wrong==FALSE)),
                                                 not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
+print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
+print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
 ftr_ctr2 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr2)
@@ -135,8 +144,9 @@ ctr2_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Negative control 2') +
-  mytme
+  labs(y='Count', x='', title='Negative controls 2') +
+  scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
+  mytme + xtme + theme(legend.position = 'none')
 sm_tb_ctr2 = sm_tb[sm_tb$gp=='hit',]
 
 #### positive controls
@@ -147,6 +157,8 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==FALSE)),
                                                 wrong_hit=length(which(wrong==TRUE)),
                                                 not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
+print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
+print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
 ftr_pos = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_pos)
@@ -155,7 +167,8 @@ pos_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
   labs(y='Count', x='', title='Positive controls') +
-  mytme
+  scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
+  mytme + xtme + theme(legend.position = 'none')
 sm_tb_pos = sm_tb[sm_tb$gp=='hit',]
 
 ### Rank cancers
@@ -176,65 +189,157 @@ mtx$sumHit = rowSums(mtx)
 mtx = mtx[order(mtx$sumHit, decreasing = T),]
 mtx$cancer = factor(rownames(mtx), levels=rownames(mtx))
 rank_pfl = ggplot(mtx) +
-  geom_bar(aes(x=cancer, y=sumHit), stat = 'identity', fill='black') +
+  geom_bar(aes(x=cancer, y=sumHit), stat = 'identity') +
   scale_y_continuous(expand = c(0,0)) +
   labs(x='', y='Sum of hit counts') +
-  mytme
-marrangeGrob(grobs=list(ctr1_count, ctr2_count, pos_count, rank_pfl),ncol=2,nrow=2) %>% 
+  scale_fill_d3() +
+  mytme +xtme
+marrangeGrob(grobs=list(ctr1_count, ctr2_count, pos_count, rank_pfl),ncol=2,nrow=2, top='') %>% 
   ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount.pdf'),
-         plot=., width=11.69*1.3,height=8.27,units='in',device='pdf',dpi=300)
+         plot=., width=11.69*0.7,height=8.27*0.9,units='in',device='pdf',dpi=300)
 
-
-# WT control or Not !!! Choice
-ctr_long_plt = subset(ctr_long, !ctr_long$Gene_annotation %in% c('wt_control', 'wt_control_2'))
-ctr_long_plt = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
-ctr_long_plt = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
-
-for (i in unique(ctr_long_plt$experiment)){
-  ctr_long_sub = subset(ctr_long_plt, ctr_long_plt$experiment==i)
-  g = ggplot(ctr_long_sub) +
-    geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
-                   color=-log10(FDR), shape=wrong), stroke=2) +
-    scale_shape_manual(name='', label=c('Negative', 'Positive'), limits = c(FALSE, TRUE), values = c(1,2)) +
-    scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long_plt$beta), na.rm=T)))) +
-    # facet_rep_wrap(~experiment, ncol = 2, repeat.tick.labels = TRUE) +
-    # scale_colour_gradient2(low = "blue", high = "purple", mid = "pink") +
-    sc +
-    mytme +
-    geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
-               aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
-    # y = 'Mutation (group)'
-    labs(x='', y='', title = i) +
-    theme(strip.background = element_rect(fill=NA), 
-          strip.text = element_text(face='bold', color='black', size=12),
-          axis.text.x = element_text(hjust = 1, vjust=0.5, size=12, angle = 90, face='italic'),
-          axis.text.y = element_text(hjust = 1, size=12),
-          axis.title.y = element_text(size=16),
-          panel.border = element_rect(color='black', size=1, fill=NA),
-          panel.grid.major = element_line(color='grey',linetype='dotted'),
-          legend.position = 'none'
-          )
-  plt.list[[i]] = g
+# Annotate mutant passing QC or not
+ctr_long$mut_ann = FALSE
+for (i in 1:nrow(ctr_long)){
+  if (ctr_long$mutation[i] %in% detected_exp[[ctr_long$experiment[i]]]){
+    ctr_long$mut_ann[i] = TRUE
+  }
 }
 
-marrangeGrob(grobs=plt.list,ncol=3,nrow=3) %>% 
+ctr_long_breast = subset(ctr_long, ctr_long$cancer=='BRCA' & ctr_long$mutation %in% 
+                           c('R175H', 'Walerych et al., 2016', 'Hotspots')) # for later
+# WT control or Not !!! Choice
+ctr_long = ctr_long[ctr_long$mutation != 'Walerych et al., 2016',]
+ctr_long_plt_3 = subset(ctr_long, !ctr_long$Gene_annotation %in% c('wt_control', 'wt_control_2'))
+ctr_long_plt_1 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
+ctr_long_plt_2 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
+
+# Plotting ====
+plt.list = list()
+myPalette = colorRampPalette(c("royalblue", '#D62728FF'))
+up_p = ceiling(-log10(min(ctr_long$FDR, na.rm = T)))
+print(up_p)
+sc = scale_colour_gradientn(colours = myPalette(50), 
+                            limits=c(0, up_p),breaks = c(0,8,16,32), trans = 'log1p')
+ssp = scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long$beta), na.rm=T))))
+count = 1
+for (ctr_long_plt in list(ctr_long_plt_1, ctr_long_plt_2, ctr_long_plt_3)){
+  for (i in unique(ctr_long_plt$experiment)){
+    ctr_long_sub = subset(ctr_long_plt, ctr_long_plt$experiment==i)
+    test = as.character(unique(ctr_long_sub$mutation[ctr_long_sub$mut_ann==FALSE]))
+    nm_exp = toupper(strsplit(i, split = '_')[[1]][2])
+    g = ggplot(ctr_long_sub) +
+      geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
+                     color=-log10(FDR), shape=wrong), stroke=2) +
+      scale_shape_manual(name='', label=c('Positive', 'Negative'), limits = c(FALSE, TRUE), values = c(1,2)) +  # 16 17
+      # facet_rep_wrap(~experiment, ncol = 2, repeat.tick.labels = TRUE) +
+      # scale_colour_gradient2(low = "blue", high = "purple", mid = "pink") +
+      sc + ssp +
+      mytme +
+      geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
+                 aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
+      # y = 'Mutation (group)'
+      labs(x='', y='', title = nm_exp) +
+      theme(strip.background = element_rect(fill=NA), 
+            strip.text = element_text(face='bold', color='black', size=12),
+            axis.text.x = element_text(hjust = 1, vjust=0.5, size=12, angle = 90, face='italic'),
+            axis.text.y = element_text(hjust = 1, size=12),
+            axis.title.y = element_text(size=18),
+            panel.border = element_rect(color='black', size=1, fill=NA),
+            panel.grid.major = element_line(color='grey',linetype='dotted'),
+            legend.position = 'none'
+      )
+    if (length(test) > 0){
+      wid = length(unique(ctr_long_sub$Gene)) / 2
+      for (nd_gene in test){
+        g = g + geom_hline(yintercept = nd_gene, color='black') +
+          geom_label(x = wid, y=nd_gene, label.size = 0, label.r = unit(0,'lines'),
+                     fill='white', label='Not passing VAF filter')
+      }
+    }
+    plt.list[[paste(count, i, sep='_')]] = g
+  }
+  count = count + 1
+}
+
+marrangeGrob(grobs=plt.list,ncol=3,nrow=9, top = '') %>% 
   ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_posCtr.pdf'),
-       plot=., width=11.69*2.4,height=8.27*1.5,units='in',device='pdf',dpi=300)
+       plot=., height=11.69*3.2, width=8.27*3.5,units='in',device='pdf',dpi=300)
+
+ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_legend.pdf'),
+       plot=plt.list[[1]] + theme(legend.position = 'bottom'), 
+       width=11.69*2, height=8.27,units='in',device='pdf',dpi=300)
 
 
-### Contact VS Conform in Esposito, 2022
+### Plot individual panel for breast cancer Fig 1B ====
+plt.list = list()
+myPalette = colorRampPalette(c("royalblue", '#D62728FF'))
+up_p = ceiling(-log10(min(ctr_long_breast$FDR, na.rm = T)))
+print(up_p)
+sc = scale_colour_gradientn(colours = myPalette(50), 
+                            limits=c(0, up_p),breaks = c(0,2,4,8,16), trans = 'log1p')
+ssp = scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long_breast$beta), na.rm=T))))
+ctr_long_plt_3 = subset(ctr_long_breast, !ctr_long_breast$Gene_annotation %in% c('wt_control', 'wt_control_2'))
+ctr_long_plt_1 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control')
+ctr_long_plt_2 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control_2')
+df_list = list(ctr_long_plt_1, ctr_long_plt_2, ctr_long_plt_3)
+tle = c('BRCA Negative controls 1', 'BRCA Negative controls 2', 'BRCA Positive controls')
+for (j in 1:length(df_list)){
+  ctr_long_plt = df_list[[j]]
+  for (i in unique(ctr_long_plt$experiment)){
+    ctr_long_sub = subset(ctr_long_plt, ctr_long_plt$experiment==i)
+    test = as.character(unique(ctr_long_sub$mutation[ctr_long_sub$mut_ann==FALSE]))
+    g = ggplot(ctr_long_sub) +
+      geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
+                     color=-log10(FDR), shape=wrong), stroke=2) +
+      scale_shape_manual(name='', label=c('Positive', 'Negative'), limits = c(FALSE, TRUE), values = c(1,2)) +  # 16 17
+      sc + ssp +
+      mytme +
+      geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
+                 aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
+      labs(x='', y='', title = tle[j]) +
+      theme(strip.background = element_rect(fill=NA), 
+            strip.text = element_text(face='bold', color='black', size=12),
+            axis.text.x = element_text(hjust = 1, vjust=0.5, size=12, angle = 90, face='italic'),
+            axis.text.y = element_text(hjust = 1, size=12),
+            axis.title.y = element_text(size=18),
+            panel.border = element_rect(color='black', size=1, fill=NA),
+            panel.grid.major = element_line(color='grey',linetype='dotted'),
+            legend.position = 'none'
+      )
+    if (length(test) > 0){
+      wid = length(unique(ctr_long_sub$Gene)) / 2
+      for (nd_gene in test){
+        g = g + geom_hline(yintercept = nd_gene, color='black') +
+          geom_label(x = wid, y=nd_gene, label.size = 0, label.r = unit(0,'lines'),
+                     fill='white', label='Not passing VAF filter')
+      }
+    }
+    plt.list[[j]] = g
+  }
+}
+marrangeGrob(grobs=plt.list,ncol=1,nrow=3, top = '') %>% 
+  ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_Ctr_BRCA.pdf'),
+         plot=., height=11.69*0.8, width=8.27*1.1,units='in',device='pdf',dpi=300)
+
+ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_Ctr_BRCA_legend.pdf'),
+       plot=plt.list[[3]] + theme(legend.position = 'bottom'), 
+       height=8, width=12,units='in',device='pdf',dpi=300)
+
+
+### Contact VS Conform in Esposito, 2022 ====
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 load('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData')
 tcga = dt
-load('/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData')
+load('/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData')
 ccle = dt
 remove(dt)
 gc()
 
 
-contact_cell = intersect(ccle[[1]]@colData$NAME, 
+contact_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
                          c('MDA-MB-468','U373MG', 'U-251 MG', 'SF-295', 'HCC193', 'PC9'))
-conform_cell = intersect(ccle[[1]]@colData$NAME, 
+conform_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
                          c('HCC1395', 'HCC1954', 'SK-MEL-2', 'SK-LMS-1'))
 genes = c('TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
 
@@ -250,17 +355,29 @@ ggplot(comp, aes(x=group,y=exp)) +
   mytme
 
 mutation_groups = list(c(273,248), c(175,245,249,282))
-names(mutation_groups) = c('Contact', 'Conform')
+names(mutation_groups) = c('HS cont.', 'HS conf.')
 
-genes = c('HMGCR', 'MVK', 'MVD', 'FDPS', 'SQLE', 'LSS', 'DHCR7', 'TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
+genes = c('HMGCR', 'MVK', 'MVD', 'FDPS', 'SQLE', 'LSS', 'DHCR7')
+genes = c('TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
+# n=30 n=28 n=40 n=651; HS conf., HS cont., nonsense, wildtype
 plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups, 
               primary_site = 'Breast', rnai = NULL, 
-              comparison = list('rna'=list(c('Contact', 'Wildtype'),
-                                           c('Conform', 'Contact')),
-                                'rnai'=list(c('Contact', 'Wildtype'))),
-              no_ccle = TRUE)
-plt %>% marrangeGrob(ncol=2, nrow=3, top = '',
-                     layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
-  ggsave(file.path(plot_out, 'TEAD_controls.pdf'),
-         plot=., width=8,height=16,units='in',device='pdf',dpi=300)
+              comparison = list('rna'=list(c('HS cont.', 'Wildtype'),
+                                           c('HS conf.', 'HS cont.'),
+                                           c('HS conf.', 'Wildtype'))),
+              no_ccle = TRUE, plot_n = FALSE)
+
+for (i in 1:length(plt$plots)){
+  plt$plots[[i]] = plt$plots[[i]] + labs(x='',y=toupper(strsplit(names(plt$plots)[i], split='_')[[1]][1]))
+}
+
+plt$plots %>% marrangeGrob(ncol=4, nrow=2, top = '',
+                           layout_matrix = matrix(1:8,byrow = T, ncol=4)) %>%
+  ggsave(file.path(plot_out, 'MVA_controls.pdf'), bg = 'transparent',
+         plot=., width=8.27*1.3,height=11.69*0.6,units='in',device='pdf',dpi=300)
+
+plt$plots %>% marrangeGrob(ncol=4, nrow=1, top = '',
+                     layout_matrix = matrix(1:4,byrow = T, ncol=4)) %>%
+  ggsave(file.path(plot_out, 'TEAD_controls.pdf'), bg = 'transparent',
+         plot=., width=8.27*1.3,height=11.69*0.3,units='in',device='pdf',dpi=300)
 

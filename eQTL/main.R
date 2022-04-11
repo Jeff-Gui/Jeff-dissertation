@@ -14,7 +14,7 @@ gc()
 # ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
 config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
 # default_ult.yaml default_vsNull.yaml default_vsWT.yaml
-default_cfg_name = 'default_ult.yaml'
+default_cfg_name = 'default_ult_vsWT.yaml'
 
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',

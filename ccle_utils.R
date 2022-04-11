@@ -87,7 +87,9 @@ load_crispr_score = function(fp = '/Users/jefft/Desktop/p53_project/datasets/CCL
 
 get_genes_plt = function(genes, ccle, tcga, mutation_groups, 
                          primary_site, rnai=NULL, comparison=NULL,
-                         no_rnai=FALSE, no_ccle=FALSE, flt_other=TRUE, no_plot=FALSE){
+                         no_rnai=FALSE, no_ccle=FALSE, flt_other=TRUE, no_plot=FALSE,
+                         plot_nonsense=TRUE, plot_n=TRUE,
+                         anovalabel.x.npc = 0.1, anovalabel.y.npc = 0.1){
   # flt_other: filter mutation not belonging to nonsense, missense or frameshift, or multiple mutations. 
   # no_plot: remove any plot, return dataframe only.
   source('/Users/jefft/Desktop/Manuscript/set_theme.R')
@@ -112,18 +114,34 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
   }
   
   for (i in 1:length(mutation_groups)){
-    b_m = get_binary_SNP_m_from_maf(ccle[[2]]@data, 
-                                    snp_list = list(mutation_groups[[i]]),
-                                    samples = rownames(ccle[[1]]@colData), 
-                                    mode = 'position')
+    if (length(grep('p\\.', names(mutation_groups)[[i]]))>0){
+      b_m = get_binary_SNP_m_from_maf(ccle[[2]]@data, 
+                                      snp_list = list(mutation_groups[[i]]),
+                                      samples = rownames(ccle[[1]]@colData), 
+                                      mode = 'amino_acid',
+                                      snp_col_nm = 'HGVSp_Short')
+    } else {
+      b_m = get_binary_SNP_m_from_maf(ccle[[2]]@data, 
+                                      snp_list = list(mutation_groups[[i]]),
+                                      samples = rownames(ccle[[1]]@colData), 
+                                      mode = 'position')
+    }
     ccle[[1]]@colData[paste('mutation_binary_state',i, sep='.')] = b_m
   }
   for (i in 1:length(mutation_groups)){
-    b_m = get_binary_SNP_m_from_maf(tcga[[2]]@data, 
-                                    snp_list = list(mutation_groups[[i]]),
-                                    samples = rownames(tcga[[1]]@colData),
-                                    protein_change_col = 'HGVSp_Short',
-                                    mode = 'position')
+    if (length(grep('p\\.', names(mutation_groups)[[i]]))>0){
+      b_m = get_binary_SNP_m_from_maf(tcga[[2]]@data, 
+                                      snp_list = list(mutation_groups[[i]]),
+                                      samples = rownames(tcga[[1]]@colData),
+                                      snp_col_nm = 'HGVSp_Short',
+                                      mode = 'amion_acid')
+    } else {
+      b_m = get_binary_SNP_m_from_maf(tcga[[2]]@data, 
+                                      snp_list = list(mutation_groups[[i]]),
+                                      samples = rownames(tcga[[1]]@colData),
+                                      protein_change_col = 'HGVSp_Short',
+                                      mode = 'position')
+    }
     tcga[[1]]@colData[paste('mutation_binary_state',i, sep='.')] = b_m
   }
   
@@ -178,18 +196,21 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
       a = ggplot(df_plt, aes(x=itg_state, y=gene_expr)) +
         geom_violin() +
         geom_boxplot(width=0.3, outlier.shape = NA) +
-        geom_jitter(width=0.1, alpha=0.7, size=0.5) +
+        geom_jitter(width=0.1, alpha=0.5, size=0.5) +
         mytme +
         labs(x='p53 state', y=paste(gene, 'expression')) +
-        EnvStats::stat_n_text(fontface = "italic") + 
         theme(strip.background = element_rect(fill='transparent'),
               strip.text = element_text(size=12, face='bold'),
               axis.text.x = element_text(angle=45, hjust = 1))
+      if (plot_n){
+        a = a + EnvStats::stat_n_text(fontface = "italic")
+      }
       if (!no_ccle){
         a = a + facet_wrap(~db)
       }
       if (!is.null(comparison$rna)){
-        a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test')
+        a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test', label = 'p.signif') +
+          stat_compare_means(method = 'anova', label.y.npc = anovalabel.y.npc, label.x.npc = anovalabel.x.npc)
       }
     }
     
@@ -200,12 +221,14 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
         geom_violin() +
         geom_boxplot(width=0.3, outlier.shape = NA) +
         geom_jitter(width=0.1, alpha=0.7, size=0.5) +
-        EnvStats::stat_n_text(fontface = "italic") + 
         mytme +
         labs(x='p53 state', y=paste(gene, 'RNAi dependency')) +
         theme(strip.background = element_rect(fill='transparent'),
               strip.text = element_text(size=16),
               axis.text.x = element_text(angle=45, hjust = 1))
+      if (plot_n){
+        b = b + EnvStats::stat_n_text(fontface = "italic")
+      }
       if (!is.null(comparison$rnai)){
         b = b + stat_compare_means(comparisons = comparison$rnai, method = 't.test')
       }
