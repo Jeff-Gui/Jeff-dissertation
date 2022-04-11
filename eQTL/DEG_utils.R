@@ -77,6 +77,9 @@ ggsave(file.path(outdir, 'filter_DEGs.pdf'),
        plot=g, width=4,height=3,units='in',device='pdf',dpi=300)
 difgene = degs$gene[which(abs(degs$diff)>0.8)]
 
+## Enrichment ====
+test = do_GO(difgene, background = rownames(assay(dt[[1]][,,'RNA']))) # cell cycle markers
+
 ## Clustering ====
 expr = expression[difgene, c(all_mut, wildtype)]
 library(pheatmap)
@@ -86,11 +89,14 @@ for (i in names(mut_ann)){
   ann_spl[mut_ann[[i]],'p53_state'] = i
 }
 table(ann_spl)
-ann_spl_sub = subset(ann_spl, ann_spl$p53_state %in% c('wildtype', 'missense'))
+ann_spl = cbind(ann_spl, as.data.frame(dt[[1]]@colData[rownames(ann_spl),'SUBTYPE']))
+colnames(ann_spl) = c('p53_state', 'subtype')
+ann_spl_sub = subset(ann_spl, ann_spl$p53_state %in% c('wildtype', 'missense') & ann_spl$subtype!='')
 expr_sub = expr[,rownames(ann_spl_sub)]
 htmap = pheatmap(expr_sub, show_rownames = F, show_colnames = F, cluster_rows = F, cluster_cols = T,
          annotation_col = ann_spl_sub, file=file.path(outdir, 'BRCA_heatmap.png'))
-# extract cluster from the heatmap
+
+#extract cluster from the heatmap
 clst = htmap$tree_col
 out.id = cutree(clst, k=3)
 ann_spl_sub$cluster = out.id
