@@ -14,7 +14,8 @@ gc()
 # ccle.yaml, tcga_lusc.yaml, tcga_blca.yaml, tcga_ov.yaml, tcga_lgg.yaml
 config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.yaml, tcga_coad.yaml
 # default_ult.yaml default_vsNull.yaml default_vsWT.yaml
-default_cfg_name = 'default_ult_vsWT.yaml'
+default_cfg_name = 'default_vsWT.yaml'
+load('/Users/jefft/Desktop/p53_project/datasets/UMD_TP53/SIFT_UMD.RData')
 
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',
@@ -82,7 +83,8 @@ for (config_name in config_names) {
                       sample_col_name = eqtl_cfg$maf_sample_col_nm,
                       min_sample_per_snp = eqtl_cfg$min_vaf,
                       meta_mut_fp = eqtl_cfg$meta_mut,
-                      mode = eqtl_cfg$mode)  # different mode may lead to subsampling
+                      mode = eqtl_cfg$mode,
+                      SIFT = sift_pred)  # different mode may lead to subsampling
   snps = eqtl_m$snp
   dt[[1]] = dt[[1]][,colnames(as.matrix(snps)),]
   gene = eqtl_m$gene
@@ -128,7 +130,7 @@ for (config_name in config_names) {
                             gene_col_name = dt_cfg$gene_col_nm, 
                             sample_col_name = eqtl_cfg$maf_sample_col_nm)
       }
-      gpca = t(gpca[,1:4]) # Only using top four PCs.
+      gpca = t(gpca[,1:5]) # Only using top five PCs.
       gpca = gpca[,colnames(cvrt)]
       cvrt = rbind(cvrt, gpca)
     }

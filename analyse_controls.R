@@ -104,7 +104,7 @@ ctr_long$cancer = toupper(sapply(ctr_long$experiment, function(x){return(strspli
 
 # see how many genes cen be recovered in each cancer, hotspot only ====
 xtme = theme(axis.text.x = element_text(angle=45, size=12, vjust = 0.7),
-             legend.text = element_text(size=12))
+             legend.text = element_text(size=12), legend.direction = 'horizontal')
 #### wt control one
 ctr1 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
 ctr1 = ctr1[ctr1$mutation=='Hotspots',]
@@ -267,7 +267,7 @@ marrangeGrob(grobs=plt.list,ncol=3,nrow=9, top = '') %>%
        plot=., height=11.69*3.2, width=8.27*3.5,units='in',device='pdf',dpi=300)
 
 ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_legend.pdf'),
-       plot=plt.list[[1]] + theme(legend.position = 'bottom'), 
+       plot=plt.list[[1]] + theme(legend.position = 'bottom', legend.direction = 'horizontal'), 
        width=11.69*2, height=8.27,units='in',device='pdf',dpi=300)
 
 
@@ -326,33 +326,56 @@ ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_Ctr_BRCA_legend.pdf'),
        plot=plt.list[[3]] + theme(legend.position = 'bottom'), 
        height=8, width=12,units='in',device='pdf',dpi=300)
 
-
-### Contact VS Conform in Esposito, 2022 ====
-source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
+### Conflicting result ===
 load('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData')
 tcga = dt
 load('/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData')
 ccle = dt
 remove(dt)
 gc()
+genes = c('BAG1', 'IGF1R', 'IGF2')
+
+# mutation_groups = list(c(273,248,175,245,249,282))
+mutation_groups = read.table('/Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt', header = T)
+mutation_groups = list(mutation_groups$aa_pos)
+names(mutation_groups) = c('Hotspots')
+
+plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups, 
+                    primary_site = 'Breast', rnai = NULL, 
+                    comparison = list('rna'=list(c('Hotspots', 'Wildtype'))),
+                    no_ccle = TRUE, plot_n = FALSE, plot_nonsense = F)
+
+for (i in 1:length(plt$plots)){
+  plt$plots[[i]] = plt$plots[[i]] + labs(x='',y=toupper(strsplit(names(plt$plots)[i], split='_')[[1]][1]))
+}
+
+plt$plots %>% marrangeGrob(ncol=4, nrow=1, top = '',
+                           layout_matrix = matrix(1:4,byrow = T, ncol=4)) %>%
+  ggsave(file.path(plot_out, 'BRCA_conflict_controls.pdf'), bg = 'transparent',
+         plot=., width=8.27*1.3,height=11.69*0.3,units='in',device='pdf',dpi=300)
 
 
-contact_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
-                         c('MDA-MB-468','U373MG', 'U-251 MG', 'SF-295', 'HCC193', 'PC9'))
-conform_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
-                         c('HCC1395', 'HCC1954', 'SK-MEL-2', 'SK-LMS-1'))
-genes = c('TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
 
-comp = data.frame('name'=c(contact_cell, conform_cell), 'group'=c(rep('contact', 3), rep('conform', 3)))
-comp['ID'] = sapply(comp$name, function(x){ccle[[1]]@colData$PATIENT_ID[which(ccle[[1]]@colData$NAME==x)]})
-comp = cbind(comp, t(assay(ccle[[1]][genes,comp$ID,'RNA'])))
 
-comp = gather(comp, key='gene', value='exp', 4:7)
-ggplot(comp, aes(x=group,y=exp)) +
-  geom_point() +
-  facet_wrap(~gene) +
-  geom_text(aes(label=name)) +
-  mytme
+### Contact VS Conform in Esposito, 2022 ====
+source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
+
+# contact_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
+#                          c('MDA-MB-468','U373MG', 'U-251 MG', 'SF-295', 'HCC193', 'PC9'))
+# conform_cell = intersect(ccle[[1]]@colData$CELL_LINE_NAME, 
+#                          c('HCC1395', 'HCC1954', 'SK-MEL-2', 'SK-LMS-1'))
+# genes = c('TEAD1', 'TEAD2', 'TEAD3', 'TEAD4')
+# 
+# comp = data.frame('name'=c(contact_cell, conform_cell), 'group'=c(rep('contact', 3), rep('conform', 3)))
+# comp['ID'] = sapply(comp$name, function(x){ccle[[1]]@colData$PATIENT_ID[which(ccle[[1]]@colData$NAME==x)]})
+# comp = cbind(comp, t(assay(ccle[[1]][genes,comp$ID,'RNA'])))
+# 
+# comp = gather(comp, key='gene', value='exp', 4:7)
+# ggplot(comp, aes(x=group,y=exp)) +
+#   geom_point() +
+#   facet_wrap(~gene) +
+#   geom_text(aes(label=name)) +
+#   mytme
 
 mutation_groups = list(c(273,248), c(175,245,249,282))
 names(mutation_groups) = c('HS cont.', 'HS conf.')
@@ -365,7 +388,7 @@ plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups,
               comparison = list('rna'=list(c('HS cont.', 'Wildtype'),
                                            c('HS conf.', 'HS cont.'),
                                            c('HS conf.', 'Wildtype'))),
-              no_ccle = TRUE, plot_n = FALSE)
+              no_ccle = TRUE, plot_n = FALSE, plot_nonsense = F)
 
 for (i in 1:length(plt$plots)){
   plt$plots[[i]] = plt$plots[[i]] + labs(x='',y=toupper(strsplit(names(plt$plots)[i], split='_')[[1]][1]))

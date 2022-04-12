@@ -114,7 +114,8 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
   }
   
   for (i in 1:length(mutation_groups)){
-    if (length(grep('p\\.', names(mutation_groups)[[i]]))>0){
+    if (length(grep('^p\\.', names(mutation_groups)[[i]]))>0 | 
+        length(grep('^p\\.', mutation_groups[[i]]))>0){
       b_m = get_binary_SNP_m_from_maf(ccle[[2]]@data, 
                                       snp_list = list(mutation_groups[[i]]),
                                       samples = rownames(ccle[[1]]@colData), 
@@ -129,7 +130,8 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
     ccle[[1]]@colData[paste('mutation_binary_state',i, sep='.')] = b_m
   }
   for (i in 1:length(mutation_groups)){
-    if (length(grep('p\\.', names(mutation_groups)[[i]]))>0){
+    if (length(grep('^p\\.', names(mutation_groups)[[i]]))>0 |
+        length(grep('^p\\.', mutation_groups[[i]]))>0){
       b_m = get_binary_SNP_m_from_maf(tcga[[2]]@data, 
                                       snp_list = list(mutation_groups[[i]]),
                                       samples = rownames(tcga[[1]]@colData),
@@ -189,6 +191,9 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
     if (no_ccle){
       df_plt = subset(df_plt, db=='TCGA')
     }
+    if (!plot_nonsense){
+      df_plt = subset(df_plt, df_plt$itg_state != 'Nonsense')
+    }
     
     if (no_plot){
       a = NULL
@@ -209,8 +214,10 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
         a = a + facet_wrap(~db)
       }
       if (!is.null(comparison$rna)){
-        a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test', label = 'p.signif') +
-          stat_compare_means(method = 'anova', label.y.npc = anovalabel.y.npc, label.x.npc = anovalabel.x.npc)
+        a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test', label = 'p.signif')
+        if (length(table(df_plt$itg_state))>2){
+          a = a +  stat_compare_means(method = 'anova', label.y.npc = anovalabel.y.npc, label.x.npc = anovalabel.x.npc)
+        }
       }
     }
     

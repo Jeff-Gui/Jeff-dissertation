@@ -95,7 +95,7 @@ ggsave(file.path(plot_out, 'panCan_count_overview.pdf'),
 coll_pos_hs = list()
 for (i in exps){
   # !!! choose sign !!!
-  sub_hs = subset(hs, hs$cancer==i & hs$beta > 0)
+  sub_hs = subset(hs, hs$cancer==i & hs$beta < 0)
   if (nrow(sub_hs)>0){
     sub_hs = sub_hs[order(abs(sub_hs$beta), decreasing = T),]
     # !!! choose which hit mode to use !!!
@@ -139,6 +139,7 @@ for (i in 1:length(ovl_p)){
 }
 ridge_df = as.data.frame(ridge_df)
 colnames(ridge_df) = gsub('_', ' X ', colnames(ridge_df))
+colnames(ridge_df) = gsub('\\.', ' ', colnames(ridge_df))
 g = ggplot(ridge_df[-1,] %>% gather(key='gp',value='price',1:ncol(ridge_df)),
        aes(x=price, y=gp, fill=gp)) +
   geom_density_ridges() + labs(x='Count', y='') +
@@ -228,6 +229,7 @@ for (i in c('overlap_test_Quard_panCan_hotspot_pos.RData',
     }
   }
 }
+print(count-1)
 
 g = upset(upset_mtx_pan, intersect = colnames(upset_mtx_pan), min_size=20,
           sort_intersections_by = 'degree', sort_intersections = 'ascending',
@@ -242,7 +244,7 @@ g = upset(upset_mtx_pan, intersect = colnames(upset_mtx_pan), min_size=20,
               text_colors=c(on_background='black', on_bar='white'))
             + annotate(
               geom='text', x=Inf, y=Inf, color='#FF7F0EFF',
-              label='Significant (p<0.05) overlap', size=5,
+              label='Significant overlap', size=5,
               vjust=1, hjust=1
             ))
           # set_sizes = upset_set_size() + 
@@ -255,21 +257,23 @@ ggsave(file.path(plot_out, 'panCan_pos_upset.pdf'),
 ### Get top five GO for each significant overlap ====
 top5terms = list()
 ids = c()
+count = 0
 for (i in uquery){
   its = i$intersect
   ids = c(ids, its)
   id = paste(its, collapse =' X ')
-  #print(id)
   genes = rownames(upset_mtx_pan)[which(rowSums(upset_mtx_pan[,its]) == length(its))]
   if (length(genes)>=20){
-    # test = do_GO(genes, background = hs$gene[which(hs$beta>0)])
-    # rs = test@result
-    # rs = rs[rs$p.adjust < 0.05,]
-    # if (nrow(rs)>0){
-    #   top5terms[[id]] = test@result$Description[1:min(5,nrow(test@result))]
-    # } else {
-    #   top5terms[[id]] = NULL
-    # }
+    count = count + 1
+    print(id)
+    test = do_GO(genes, background = hs$gene[which(hs$beta>0)])
+    rs = test@result
+    rs = rs[rs$p.adjust < 0.05,]
+    if (nrow(rs)>0){
+      top5terms[[id]] = test@result$Description[1:min(5,nrow(test@result))]
+    } else {
+      top5terms[[id]] = NULL
+    }
   } else {
     print('Fewer than 20')
     print(id)
@@ -278,8 +282,10 @@ for (i in uquery){
 top5term_df = as.data.frame(sort(table(unlist(top5terms)), decreasing = F))
 top5term_df$Var1 = factor(top5term_df$Var1, levels = top5term_df$Var1)
 g = ggplot(top5term_df[(nrow(top5term_df)-5):nrow(top5term_df),]) + scale_x_continuous(expand = c(0,0)) +
-  geom_bar(aes(y=Var1,x=Freq), stat = 'identity') + mytme + 
-  labs(x='Frequency', y='')
+  geom_bar(aes(y=Var1,x=Freq/count), stat = 'identity') + mytme + 
+  labs(x='Frequency', y='') +
+  geom_text(aes(label=Freq, y=Var1, x=Freq/count), nudge_x = -0.1, color='white') +
+  scale_x_continuous(limits = c(0,1.1), expand = c(0,0), breaks=seq(0,1,0.5))
 ggsave(file.path(plot_out, 'panCan_pos_upset_GO.pdf'),
        plot=g, height=11.69*0.3,width=8.27*0.5,units='in',device='pdf',dpi=300)
 
@@ -296,12 +302,12 @@ colnames(df_ovl) = c('trh', 'tarGene', 'ctrGene')
 df_ovl = gather(df_ovl, key='gp', value='Count', 2:3)
 df_ovl$gp = factor(df_ovl$gp, levels = c('tarGene', 'ctrGene'))
 g = ggplot(df_ovl, aes(x=trh,y=Count, color=gp)) +
-  geom_vline(xintercept = 3, color='red', size=1) +
+  geom_vline(xintercept = 4, color='red', size=1) +
   geom_line(size=1.5) + geom_point(size=1.5, color='black') + mytme +
   scale_color_d3(palette = 'category20', name='', labels = c('Identified positive genes', 'Positive control genes')) +
   labs(x=str_wrap('Identified in more than # cancer types', width = 20)) +
   scale_y_log10() +
-  theme(legend.position = c(0.7,0.9)) +
+  theme(legend.position = c(0.75,0.9)) +
   scale_x_continuous(breaks = 1:ncol(upset_mtx_pan))
 ggsave(file.path(plot_out, 'panCan_pos_trh.pdf'),
        plot=g, height=11.69*0.4,width=8.27*0.8,units='in',device='pdf',dpi=300)
@@ -316,25 +322,26 @@ colnames(df_ovl) = c('trh', 'tarGene', 'ctrGene.1', 'ctrGene.2')
 df_ovl = gather(df_ovl, key='gp', value='Count', 2:4)
 df_ovl$gp = factor(df_ovl$gp, levels = c('tarGene', 'ctrGene.1', 'ctrGene.2'))
 g = ggplot(df_ovl, aes(x=trh,y=Count, color=gp)) +
-  geom_vline(xintercept = 3, color='red', size=1) +
+  geom_vline(xintercept = 4, color='red', size=1) +
   geom_line(size=1.5) + geom_point(size=1.5, color='black') + mytme +
   scale_color_d3(palette = 'category20', name='', 
                  labels = c('Identified negative genes', 'Negative control genes 1', 'Negative control genes 2')) +
   labs(x=str_wrap('Identified in more than # cancer types', width = 20)) +
   scale_y_log10() +
   scale_x_continuous(breaks = 1:ncol(upset_mtx_pan)) + 
-  theme(legend.position = c(0.7,0.9))
+  theme(legend.position = c(0.75,0.9))
 ggsave(file.path(plot_out, 'panCan_neg_trh.pdf'),
        plot=g, height=11.69*0.4,width=8.27*0.8,units='in',device='pdf',dpi=300)
 
-### Run GO on degree 3 genes ====
-tar = rownames(upset_mtx_pan[rowSums(upset_mtx_pan) >= 3,])
+### Run GO on degree x genes ====
+deg_trh = 4
+tar = rownames(upset_mtx_pan[rowSums(upset_mtx_pan) >= deg_trh,])
 # !!! change sign of the background !!!
-test = do_GO(tar, background = hs$gene[which(hs$beta>0)]) # tar: 346 genes
-ps = pcs_GO_out(test, filename = 'panCan_pos_trh3_GO.pdf', dir = plot_out)
+test = do_GO(tar, background = hs$gene[which(hs$beta>0)]) # tar: 346 genes degree 3, 74 genes degree 4
+ps = pcs_GO_out(test, filename = 'panCan_pos_trh4_GO.pdf', dir = plot_out)
 
-test = do_GO(tar, background = hs$gene[which(hs$beta<0)]) # tar: 319 genes
-ps = pcs_GO_out(test, filename = 'panCan_neg_trh3_GO.pdf', dir = plot_out) # nothing
+test = do_GO(tar, background = hs$gene[which(hs$beta<0)]) # tar: 319 genes, 49 genes degree 4
+ps = pcs_GO_out(test, filename = 'panCan_neg_trh4_GO.pdf', dir = plot_out) # p53 markers
 
 
 # Test hot spot genes in BRCA in CCLE ========
@@ -381,7 +388,6 @@ um_plt = um[um$`TCGA RNA up`>0,] # filter identified in eQTL only
 print(colSums(um))
 
 ### Shuffle upset matrix, how many observed is significant? ====
-print(colnames(um))
 # T: must be 1, F: must be 0, NA: no matter. 
 test_condition = c(NA, T, T, NA, NA, NA, T)
 ovl_p = run_overlap_test(um, test_condition = test_condition, n_loop = 1000)
@@ -422,13 +428,13 @@ ggsave(file.path(plot_out, 'BRCA', 'upset.pdf'),
 bg = tcga.brca$gene[tcga.brca$beta > 0] # use all identified as bg
 print(colnames(um))
 # ChIP and TCGA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,NA,NA,T))] # 620 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,NA,NA,T))] # 575 genes
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X ChIP-seq peaks')
 ggsave(file.path(plot_out,'BRCA', '1_chip-tcga_GO.pdf'),
        width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # TCGA RNA and CCLE RNA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,NA))] # 547 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,NA))] # 527 genes
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X CCLE RNA up') # nothing
 # ChIP and TCGA, RNAi
@@ -436,14 +442,14 @@ gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,T,NA,T))] # 
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X ChIP-seq peaks X CCLE RNAi down') # nothing
 # ChIP and TCGA, CCLE RNA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,T))] # 96 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,T))] # 92 genes
 test = do_GO(gene, background = bg, ont='BP')
 wnt_genes = test@result$geneID[1]
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X ChIP-seq peaks X CCLE RNA up', width=28))
 ggsave(file.path(plot_out,'BRCA', '4_chip-tcga-CCLE_GO.pdf'),
        width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # TCGA and CCLE RNA and CCLE RNA ns
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,T,NA,NA,NA))] # 100 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,T,NA,NA,NA))] # 96 genes
 test = do_GO(gene, background = bg, ont='BP') # nothing
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X CCLE RNA up X CCLE NS RNA up', width = 28))
 # ChIP and TCGA, CCLE RNA, CCLE RNA NS

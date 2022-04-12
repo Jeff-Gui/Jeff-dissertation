@@ -8,7 +8,7 @@ library(MultiAssayExperiment)
 
 get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
                       min_sample_per_snp=0.01, meta_mut_fp=NULL, mode='mut-VS-other',
-                      use_p53_exp = FALSE){
+                      use_p53_exp = FALSE, SIFT = NULL){
   # MAE: multiassay experiment object list, first object be gene expression and the second be MAF
   # Return Gene expression and SNP slicedData for eQTL mapping
   # mode: see get_SNP_m_from_maf
@@ -25,7 +25,7 @@ get_eQTL_m = function(mae, genes='TP53', sample_col_name='Tumor_Sample_Barcode',
                           sample_col_name = sample_col_name,
                           min_sample_per_snp = min_sample_per_snp,
                           meta_mut_fp = meta_mut_fp, mode=mode,
-                          p53_expr = p53_exp)
+                          p53_expr = p53_exp, SIFT = SIFT)
   gene = SlicedData$new()
   snp = SlicedData$new()
   snp = snp$CreateFromMatrix(rs[[2]])
@@ -49,12 +49,14 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
                               genes=NULL, samples=NULL,
                               min_sample_per_snp=5,
                               meta_mut_fp=NULL, mode='mut-VS-other',
-                              p53_expr=NULL){
+                              p53_expr=NULL, SIFT = NULL){
   # Get SNP matrix from MAF, also return SNP association table
   # Only consider missense mutation
   # genes: select specific gene list to use (Hugo symbol), if NULL, return all.
   # samples: tumour samples involved, if null will use all samples in maf.
   # mode: mut-VS-other: contrast mut+ to mut-; mut-VS-null: contrast mut+ to nonsense mutation.
+  # SIFT: sift prediction score, a vector named by HGVSp_Short
+  #   If consider SIFT: will consider Damaging mutant only
   
   # TODO: classify snp as 0, 1, or 2.
   
@@ -63,6 +65,9 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   maf = as.data.frame(maf)
   null_spl = get_null_samples(maf, gene = 'TP53', sample_col_name = sample_col_name)
   maf = subset(maf, maf$Variant_Classification == 'Missense_Mutation')
+  if (!is.null(SIFT)){
+    maf = maf[which(SIFT[maf$HGVSp_Short] == 'Damaging'),]
+  }
   sample_col_id = which(colnames(maf) == sample_col_name)
   maf[,sample_col_id] = as.character(maf[,sample_col_id])
   
@@ -122,7 +127,11 @@ get_SNP_m_from_maf = function(maf, sample_col_name,
   if (!is.null(meta_mut_fp)){
     for (id in unique(meta_mut$meta_mut_id)){
       aa_pos = meta_mut$aa_pos[which(meta_mut$meta_mut_id==id)]
-      maf_sub_meta_mut = subset(maf, maf$Protein_position %in% aa_pos)
+      if (length(grep('^p\\.', aa_pos) > 0)){
+        maf_sub_meta_mut = subset(maf, maf$HGVSp_Short %in% aa_pos)
+      } else {
+        maf_sub_meta_mut = subset(maf, maf$Protein_position %in% aa_pos)
+      }
       snp_m = rbind(snp_m, rep(0,ncol(snp_m)))
       rownames(snp_m)[nrow(snp_m)] = id
       if (!has_vaf){
@@ -201,7 +210,7 @@ get_single_eqtl_plot_dt = function(gene_name, snpid, mae, snp_m,
   # annotate mut class
   rna[which(rna$mut_state==0), 'mut_cls'] = 'wildtype'
   mut_ann = annotate_sample_mut(mae[[2]]@data, sample_col_name, 'TP53', gene_col_name)
-  maf = subset(mae[[2]]@data, mae[[2]]@data[[gene_col_name]] == 'TP53')
+  # maf = subset(mae[[2]]@data, mae[[2]]@data[[gene_col_name]] == 'TP53')
   for (i in names(mut_ann)){
     rna[mut_ann[[i]], 'mut_cls'] = i
   }
@@ -304,12 +313,15 @@ genotype_pca = function(maf, out_dic=NULL, samples=NULL, file_out=FALSE,
 }
 
 
-annotate_sample_mut = function(maf, sample_col_name = 'Tumor_Sample_Barcode', gene='TP53', gene_col_name = 'Hugo_Symbol'){
+annotate_sample_mut = function(maf, sample_col_name = 'Tumor_Sample_Barcode', gene='TP53', gene_col_name = 'Hugo_Symbol',
+                               fp_SIFT = '/Users/jefft/Desktop/p53_project/datasets/UMD_TP53/SIFT_UMD.RData'){
+  load(fp_SIFT)
   maf = subset(maf, maf[[gene_col_name]] %in% gene)
   maf[[sample_col_name]] = as.character(maf[[sample_col_name]])
-  mis_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='missense_variant')])
   non_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='stop_gained')])
   fsv_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='frameshift_variant')])
+  mis_sample = unique(maf[[sample_col_name]][which(maf$Consequence=='missense_variant' & 
+                                                     sift_pred[maf$HGVSp_Short] == 'Damaging')])
   # Sample may have more than one kinds of mutations
   pool = c(mis_sample, non_sample, fsv_sample)
   others = pool[which(duplicated(pool))]
@@ -363,8 +375,13 @@ get_binary_SNP_m_from_maf = function(maf, snp_list, snp_col_nm=NULL,
                                      sample_col_name='Tumor_Sample_Barcode',
                                      gene_col_name='Hugo_Symbol', mode='amino_acid',
                                      protein_change_col = 'Protein_Change',
-                                     code_with_VAF = FALSE){
+                                     code_with_VAF = FALSE,
+                                     fp_SIFT = '/Users/jefft/Desktop/p53_project/datasets/UMD_TP53/SIFT_UMD.RData'){
   maf = subset(maf, maf[[gene_col_name]] == gene)
+  b4_length = nrow(maf)
+  load(fp_SIFT)
+  maf = maf[which(sift_pred[maf$HGVSp_Short] == 'Damaging'),]
+  print(paste('SIFT filter:', nrow(maf),'out of', b4_length, sep=' '))
   # mode: if amino_acid, then should be specific mutation.
   # if position, then should be location only.
   if (mode=='position'){
@@ -522,10 +539,17 @@ load_clean_data = function(fp, ann_p53=TRUE, ann_bin_mut_list=NULL, mode=NULL, u
           print(paste(mut, 'not found in meta mutant directory.'))
           next
         }
-        b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, snp_list = list(snp_list),
-                                        protein_change_col = protein_change_col,
-                                        snp_col_nm = snp_col_nm,
-                                        samples = sps, mode = 'position', code_with_VAF = code_with_VAF)
+        if (length(grep('^p\\.', snp_list))>0){
+          b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, snp_list = list(snp_list),
+                                          protein_change_col = protein_change_col,
+                                          snp_col_nm = snp_col_nm,
+                                          samples = sps, mode = 'amino_acid', code_with_VAF = code_with_VAF)
+        } else {
+          b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, snp_list = list(snp_list),
+                                          protein_change_col = protein_change_col,
+                                          snp_col_nm = snp_col_nm,
+                                          samples = sps, mode = 'position', code_with_VAF = code_with_VAF)
+        }
       }
       dt[[1]]@colData[[paste('has_', mut, sep='')]] = 0
       dt[[1]]@colData[rownames(b_m)[b_m==1],paste('has_', mut, sep='')] = 1
@@ -571,12 +595,21 @@ annotate_mut_group = function(dt, check_muts, as.mtx=TRUE){
   others = intersect(idx_ftd, rownames(dt[[1]]@colData)[which(dt[[1]]@colData$p53_state == 'others')])
   rt_list = list('others'=others)
   for (check_mut in check_muts){
+    flag = FALSE
     if (length(grep('p\\.', check_mut))==0){
       mut_aa = unique(meta_mut$aa_pos[meta_mut$meta_mut_id == check_mut])
-      b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
-                                      snp_list = list(mut_aa),
-                                      samples = idx_ftd, 
-                                      mode = 'position')
+      if (length(grep('p\\.', mut_aa))==0){
+        b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
+                                        snp_list = list(mut_aa),
+                                        samples = idx_ftd, 
+                                        mode = 'position')
+      } else {
+        b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
+                                        snp_list = list(mut_aa),
+                                        snp_col_nm = 'Protein_Change',
+                                        samples = idx_ftd, 
+                                        mode = 'amino_acid')
+      }
     } else {
       b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, 
                                       snp_list = list(check_mut),

@@ -97,8 +97,8 @@ ggsave(file.path(dirname(plot_out), 'Volcano_overview.png'),
 ### Run GO
 cache = TRUE
 if (cache){
-  load(file.path(dir_home, 'GO_result.RData'))
-  # load(file.path(dir_home, 'GO_result_no_BG_filter.RData'))
+  # load(file.path(dir_home, 'GO_result.RData'))
+  load(file.path(dir_home, 'GO_BP_result_no_BG_filter.RData'))
 } else {
   load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
   mtx = as.data.frame(mtx)
