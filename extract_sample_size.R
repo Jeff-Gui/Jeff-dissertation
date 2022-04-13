@@ -33,6 +33,21 @@ for (fd in folder){
 colnames(coll) = c('Mutation', 'Control', 'Mutant','Gene_NM', 'Cancer')
 write.table(coll, file.path(dir_home, 'sample_size.txt'), sep='\t', row.names = F, quote = F)
 
+### visualise ====
+source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+coll_plt = coll
+coll_plt$Gene_NM_perMut = as.numeric(coll_plt$Gene_NM) / as.numeric(coll_plt$Mutant)
+coll_plt = coll_plt[coll_plt$Mutation %in% c('hot_spot', 'contact', 'sandwich', 'conformation'),]
+g = ggplot(coll_plt) +
+  geom_bar(aes(x=Cancer, y=Gene_NM_perMut), stat='identity', position = 'dodge') +
+  facet_wrap(~Mutation, scales = 'free') +
+  scale_y_continuous(expand = c(0,0)) + theme_classic() +
+  mytme +
+  theme(axis.text.x = element_text(angle=45, vjust = 0.5), legend.direction = 'horizontal',
+        strip.text = element_text(size=14))
+ggsave(file.path(dir_home,'plots', 'Normalized_result_size.pdf'), bg = 'transparent',
+       plot=g, height=8.27,width=11.69,units='in',device='pdf',dpi=300)
+
 ### compare ====
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 plot_out = '/Users/jefft/Desktop/p53_project'

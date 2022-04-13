@@ -24,8 +24,8 @@ config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.y
 
 for (config_name in config_names) {
   refresh_log = TRUE
-  save_intermediate = FALSE  # may spend extra time
-  use_cache = TRUE
+  save_intermediate = TRUE  # may spend extra time
+  use_cache = FALSE
   use_cache_geno_pca = TRUE
   source = TRUE
   

@@ -10,27 +10,27 @@ library(MultiAssayExperiment)
 # Ref: https://bioconductor.org/packages/release/bioc/vignettes/MultiAssayExperiment/inst/doc/MultiAssayExperiment.html
 # setwd('/Users/jefft/Desktop/p53_project')
 # 
-dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
-dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
-case_complete_nm = 'cases_complete.txt'
-case_complete_nm = 'cases_all.txt'
-#exp_nm = 'data_mrna_seq_v2_rsem.txt'
-exp_nm = 'data_mrna_seq_rpkm.txt'
-exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
-cna_nm = 'data_cna.txt'
-mut_nm = 'data_mutations.txt'
-gene_col_nm = 'Hugo_Symbol'
-sample_meta_nm = 'data_clinical_sample.txt'
-patient_meta_nm = 'data_clinical_patient.txt'
-case_list_dir_nm = 'case_lists'
-na.str = ''
-has_log_ed = FALSE
-rm_low_expr_gene = NULL
-normalize_genes = NULL
-quantile_norm = TRUE
-z_score = FALSE
-diag_out = NULL
-filter_protein_coding = NULL
+# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/ccle_broad_2019'
+# dataset_home = '/Users/jefft/Desktop/p53_project/datasets/LUAD-TCGA/luad_tcga_pan_can_atlas_2018'
+# case_complete_nm = 'cases_complete.txt'
+# case_complete_nm = 'cases_all.txt'
+# #exp_nm = 'data_mrna_seq_v2_rsem.txt'
+# exp_nm = 'data_mrna_seq_rpkm.txt'
+# exp_nm = 'data_mrna_seq_v2_rsem_zscores_ref_normal_samples.txt'
+# cna_nm = 'data_cna.txt'
+# mut_nm = 'data_mutations.txt'
+# gene_col_nm = 'Hugo_Symbol'
+# sample_meta_nm = 'data_clinical_sample.txt'
+# patient_meta_nm = 'data_clinical_patient.txt'
+# case_list_dir_nm = 'case_lists'
+# na.str = ''
+# has_log_ed = FALSE
+# rm_low_expr_gene = NULL
+# normalize_genes = NULL
+# quantile_norm = TRUE
+# z_score = FALSE
+# diag_out = NULL
+# filter_protein_coding = NULL
 
 clean_matrix = function(mtx, complete_cases_dot, gene_col_nm){
   mtx = mtx[!is.na(mtx[gene_col_nm]),]

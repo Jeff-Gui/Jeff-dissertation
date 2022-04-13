@@ -14,15 +14,15 @@ library(stringr)
 library(ggvenn)
 library(enrichplot)
 library(ComplexUpset)
-
-gl = load_GO_out(exp_home = dir_home, gene_ratio_min = 0)
-go_df = gl$df
-go_df = go_df[grep('GO', go_df$ID),]
-
-# Core VS Contact mutant, GO =====================================
-signn = 'neg'
+source('../overlap_utils.R')
 exp_plt_out = file.path(dir_home, 'plots', 'coreVScontact')
 
+# GO ====
+gl = load_GO_out(exp_home = dir_home, gene_ratio_min = 0,
+                 fname = 'GO_BP_result_no_BG_filter.RData')
+go_df = gl$df
+go_df = go_df[grep('GO', go_df$ID),]
+signn = 'neg'
 cc_go_df = subset(go_df, go_df$mutation %in% c('conformation', 'contact', 'sandwich'))
 cc_go_df = cc_go_df[grep('GO', cc_go_df$ID),]
 
@@ -86,7 +86,7 @@ ccle.core = ccle.core$ccle.valid
 ccle.contact = ccle.contact$ccle.valid
 save(ccle.core, ccle.contact, file = file.path(data_out, 'ccle_breast_ContactCorevsWT_allgenes.RData'))
 
-# Gene ================
+# Gene ====
 ## Load dt ====
 load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
 # load(file.path(data_out, 'ccle_breast_ContactCorevsWT_allgenes.RData'))
@@ -104,9 +104,15 @@ for (i in names(coll)){
 df_coll = subset(df_coll, df_coll$protein_change %in% c('contact', 'conformation', 'sandwich'))
 
 ## Overlap overview in cancers ====
+sign = 'pos'
 plt.list = list()
+hs_mtx_coll = list()
 for (i in unique(df_coll$experiment)){
-  test = df_coll[df_coll$experiment==i & df_coll$beta > 0,]
+  if (sign == 'pos'){
+    test = df_coll[df_coll$experiment==i & df_coll$beta > 0,]
+  } else {
+    test = df_coll[df_coll$experiment==i & df_coll$beta < 0,]
+  }
   cr = toupper(strsplit(i, split = '_')[[1]][2])
   ls = list()
   for (j in c('conformation', 'contact', 'sandwich')){
@@ -115,61 +121,84 @@ for (i in unique(df_coll$experiment)){
       ls[[j]] = tf
     }
   }
+  hs_mtx_coll[[cr]] = gen_upSet_mtx(ls)
   if (length(ls)>1){
     print(cr)
     g = ggvenn(ls) + labs(title=cr)
     plt.list[[cr]] = g
   }
 }
+save(hs_mtx_coll, file = file.path(data_out, paste('UpsetMtx_strc_',sign,'.RData', sep='')))
 plt.list %>% marrangeGrob(ncol=2, nrow=2, top = '') %>%
-  ggsave(file.path(exp_plt_out, 'Gene_overview_pos.pdf'),
+  ggsave(file.path(exp_plt_out, paste('Gene_overview_', sign, '.pdf', sep='')),
          plot=., width=10,height=10,units='in',device='pdf',dpi=300)
-### breast cancer has the largest core set
 
-## Breast cancer =============================
-breast_bg = rownames(mtx)[mtx[,'BRCA']==1]
-tissue_qtl = df_coll[grep('brca', df_coll$experiment),]
+## Find significant overlaps ====
+ovl_p_coll = list()
+for (i in 1:length(hs_mtx_coll)){
+  if (ncol(hs_mtx_coll[[i]])==3){
+    ovl_p = run_overlap_test(hs_mtx_coll[[i]], n_loop = 1000, test_condition = c(T,T,T))
+    ovl_p_coll[[names(hs_mtx_coll)[i]]] = 1-ovl_p$p.left
+  }
+}
+for (i in 1:length(ovl_p_coll)){
+  if (ovl_p_coll[[i]]<0.05){
+    print(names(ovl_p_coll)[[i]])
+  }
+}
+# Positive gene overlap: BRCA, COAD, LGG, STAD
+# Negative gene overlap: BRCA, COAD, LGG, STAD
+
+# Breast cancer ====
+load(file.path(data_out, 'UpsetMtx_strc_neg.RData'))
+neg_um = hs_mtx_coll
+load(file.path(data_out, 'UpsetMtx_strc_pos.RData'))
+pos_um = hs_mtx_coll
+remove(hs_mtx_coll)
+
+ont = 'BP'
+sub_folder = 'BRCA'
+ern_exp_name = 'BRCA_strc_enrichment.RData'
+
+uni_bg = rownames(mtx)[mtx[, sub_folder]==1]
+tissue_qtl = df_coll[grep(tolower(sub_folder), df_coll$experiment),]
+co_core_contact
 co_core_contact = get_intersection_eqtl(tissue_qtl, group_col = 'protein_change')
 wide = spread(co_core_contact[c('gene','protein_change','beta')], key = protein_change, value=beta)
 ### filter for consistent genes
 cst_gene = wide$gene[which(wide$conformation * wide$contact > 0 & wide$conformation * wide$sandwich > 0)]
-#### all genes are consistent
+print(paste('All in the core set:', nrow(wide), ', Same sign:', length(cst_gene)))
+
+uncon_wide = wide[!wide$gene %in% cst_gene,]
+print(uncon_wide)
+
 wide = subset(wide, wide$gene %in% cst_gene)
 wide[['mean_beta']] = rowMeans(wide[,2:4])
 spc_gene_pool = as.data.frame(table(tissue_qtl$gene))
 spc_gene_pool = spc_gene_pool$Var1[which(spc_gene_pool$Freq==1)]
 
-ont = 'BP'
 #### Enrichment of the union ====
+pos_um_tis = pos_um[[sub_folder]]
+neg_um_tis = neg_um[[sub_folder]]
+get_idx_condt(pos_um)
 bg_pos = unique(tissue_qtl$gene[tissue_qtl$beta>0])
 bg_neg = unique(tissue_qtl$gene[tissue_qtl$beta<0])
-pos_GO_union = do_GO(bg_pos, background = breast_bg, ont=ont)
-neg_GO_union = do_GO(bg_neg, background = breast_bg, ont=ont)
-pos_GO_union_pcs = pcs_GO_out(pos_GO_union, filename='BRCA/GO_pos_union.pdf', dir=plot_out)
-neg_GO_union_pcs = pcs_GO_out(neg_GO_union, filename='BRCA/GO_neg_union.pdf', dir=plot_out)
+pos_GO_union = do_GO(bg_pos, background = uni_bg, ont=ont)
+neg_GO_union = do_GO(bg_neg, background = uni_bg, ont=ont)
+pos_GO_union_pcs = pcs_GO_out(pos_GO_union, filename=file.path(sub_folder, 'GO_pos_union.pdf'), dir=plot_out, cneplt=F)
+neg_GO_union_pcs = pcs_GO_out(neg_GO_union, filename=file.path(sub_folder, 'GO_neg_union.pdf'), dir=plot_out, cneplt=F)
 
 #### Core set of genes ====
 pos_GO_core = do_GO(wide$gene[wide$mean_beta>0], background = bg_pos, ont=ont)
-dotplot(pos_GO_core)
-pos_GO_core_pcs = pcs_GO_out(pos_GO_core, filename='BRCA/GO_pos_coreSet.pdf', dir=plot_out)
+pos_GO_core_pcs = pcs_GO_out(pos_GO_core, filename=file.path(sub_folder, 'GO_pos_coreSet.pdf'), dir=plot_out, cneplt = F)
 neg_GO_core = do_GO(wide$gene[wide$mean_beta<0], background = bg_neg, ont=ont)
-dotplot(neg_GO_core)
-neg_GO_core_pcs = pcs_GO_out(neg_GO_core, filename='BRCA/GO_neg_coreSet.pdf', dir=plot_out) # nothing!
+neg_GO_core_pcs = pcs_GO_out(neg_GO_core, filename=file.path(sub_folder, 'GO_neg_coreSet.pdf'), dir=plot_out, cneplt=F) # nothing!
 
-gsea_test = do_GSEA(wide, rank_nm = 'mean_beta')
-gseaplot2(gsea_test, 2)
-rs = gsea_test@result
-p53_gs = rs[nrow(rs),'core_enrichment']
-wide[wide$gene %in% strsplit(p53_gs, split='/')[[1]],]
-
-ccle.core.pos = ccle.core$gene[which(ccle.core$ccle.wt.p<0.05 & ccle.core$ccle.wt.dif > 0)]
-ccle.contact.pos = ccle.contact$gene[which(ccle.contact$ccle.wt.p<0.05 & ccle.core$ccle.wt.dif > 0)]
-ccle.core.neg = ccle.core$gene[which(ccle.core$ccle.wt.p<0.05 & ccle.core$ccle.wt.dif < 0)]
-ccle.contact.neg = ccle.contact$gene[which(ccle.contact$ccle.wt.p<0.05 & ccle.core$ccle.wt.dif < 0)]
-
-ccle.tcga.co.pos = intersect(wide$gene, intersect(ccle.core.pos, ccle.contact.pos))
-ccle.tcga.co.neg = intersect(wide$gene, intersect(ccle.core.neg, ccle.contact.neg))
-wide = wide[wide$gene %in% c(ccle.tcga.co.neg, ccle.tcga.co.pos),]
+# gsea_test = do_GSEA(wide, rank_nm = 'mean_beta')
+# gseaplot2(gsea_test, 2)
+# rs = gsea_test@result
+# p53_gs = rs[nrow(rs),'core_enrichment']
+# wide[wide$gene %in% strsplit(p53_gs, split='/')[[1]],]
 
 #### Contact specific ====
 contact_spc = tissue_qtl[which(tissue_qtl$protein_change == 'contact' & 
@@ -180,27 +209,19 @@ go_con_neg = do_GO(contact_spc$gene[contact_spc$beta < 0], background = bg_neg) 
 
 gsea_test = do_GSEA(contact_spc[contact_spc$beta!=0,], rank_nm = 'beta')
 
-go_con_pos_pcs = pcs_GO_out(go_con_pos, filename = 'BRCA/GO_pos_contact.pdf', dir=plot_out)
-go_con_neg_pcs = pcs_GO_out(go_con_neg, filename = 'BRCA/GO_neg_contact.pdf', dir=plot_out) # nothing
-dotplot(go_con_pos) # cell migration
-gene_ls = unique(unlist(sapply(pcs_GO_out(go_con_pos)[[2]]$geneID, 
-              function(x){return(strsplit(x, split='/')[[1]])})))
-dotplot(go_con_neg) # 3 ER regulating genes, one term
-cnetplot(go_con_pos)
+go_con_pos_pcs = pcs_GO_out(go_con_pos, filename = file.path(sub_folder, 'GO_pos_contact.pdf'), dir=plot_out, cneplt=F)
+go_con_neg_pcs = pcs_GO_out(go_con_neg, filename = file.path(sub_folder, 'GO_neg_contact.pdf'), dir=plot_out, cneplt=F) # nothing
 
-#### core specific ====
+#### Core specific ====
 core_spc = tissue_qtl[which(tissue_qtl$protein_change == 'conformation' & 
                             (!tissue_qtl$gene %in% co_core_contact$gene) &
                               (tissue_qtl$gene %in% spc_gene_pool)),]
 go_core_pos = do_GO(core_spc$gene[core_spc$beta > 0], background = bg_pos) # nothing
 go_core_neg = do_GO(core_spc$gene[core_spc$beta < 0], background = bg_neg) # nothing
+# gsea_test = do_GSEA(core_spc[core_spc$beta != 0,])
 
-gsea_test = do_GSEA(core_spc[core_spc$beta != 0,])
-
-go_core_pos_pcs = pcs_GO_out(go_core_pos, filename = 'BRCA/GO_pos_conform.pdf', dir=plot_out)
-go_core_neg_pcs = pcs_GO_out(go_core_neg, filename = 'BRCA/GO_neg_conform.pdf', dir=plot_out)
-dotplot(go_core_pos) # nothing
-dotplot(go_core_neg) # nothing
+go_core_pos_pcs = pcs_GO_out(go_core_pos, filename = 'GO_pos_conform.pdf', dir=plot_out, cneplt=F)
+go_core_neg_pcs = pcs_GO_out(go_core_neg, filename = 'GO_neg_conform.pdf', dir=plot_out, cneplt=F)
 
 #### Sandwich specific ====
 sw_spc = tissue_qtl[which(tissue_qtl$protein_change == 'sandwich' & 
@@ -209,23 +230,27 @@ sw_spc = tissue_qtl[which(tissue_qtl$protein_change == 'sandwich' &
 go_sw_pos = do_GO(sw_spc$gene[sw_spc$beta > 0], background = bg_pos)
 go_sw_neg = do_GO(sw_spc$gene[sw_spc$beta < 0], background = bg_neg)
 
-gsea_test = do_GSEA(sw_spc[sw_spc$beta != 0,])
-gsea_test@result$ID
-gseaplot2(gsea_test, 2)
+# gsea_test = do_GSEA(sw_spc[sw_spc$beta != 0,])
+# gsea_test@result$ID
+# gseaplot2(gsea_test, 2)
 
-go_sw_pos_pcs = pcs_GO_out(go_sw_pos, filename = 'BRCA/GO_pos_sanswich.pdf', dir=plot_out)
-go_sw_neg_pcs = pcs_GO_out(go_sw_neg, filename = 'BRCA/GO_neg_sandwich.pdf', dir=plot_out)
-dotplot(go_sw_pos)
-dotplot(go_sw_neg)
-
+go_sw_pos_pcs = pcs_GO_out(go_sw_pos, filename = file.path(sub_folder, 'GO_pos_sanswich.pdf'), dir=plot_out, cneplt=F)
+go_sw_neg_pcs = pcs_GO_out(go_sw_neg, filename = file.path(sub_folder, 'GO_neg_sandwich.pdf'), dir=plot_out, cneplt=F)
 
 save(go_sw_pos_pcs, go_sw_neg_pcs, go_core_pos_pcs, go_core_neg_pcs, 
      go_con_pos_pcs, go_con_neg_pcs, pos_GO_core_pcs, neg_GO_core_pcs,
-     pos_GO_union_pcs, neg_GO_union_pcs,
-     file=file.path(data_out, 'Breast_ContactCore_noCCLE_filter.RData'))
+     pos_GO_union_pcs, neg_GO_union_pcs, wide,
+     file=file.path(data_out, ern_exp_name))
 
-### Further analysis in breast cancer =================
-load(file.path(data_out, 'Breast_ContactCore_noCCLE_filter.RData'))
+# Further analysis in breast cancer ==========
+ern_exp_name = 'BRCA_strc_enrichment.RData'
+load(file.path(data_out, ern_exp_name))
+contact_pos_rs = go_con_pos_pcs$result
+sandwich_neg_rs = go_sw_neg_pcs$result
+intersect(strsplit(contact_pos_rs$geneID[2], split='/')[[1]],
+          strsplit(sandwich_neg_rs$geneID[2], split='/')[[1]])
+test = do_GSEA(sw_spc[sw_spc$beta != 0,])
+
 # co_Gene_motile = ext_gene_GO(go_con_pos_pcs$result$geneID[1:5], do_intersect = T)
 co_Gene_motile = contact_spc$gene[contact_spc$beta > 0]
 

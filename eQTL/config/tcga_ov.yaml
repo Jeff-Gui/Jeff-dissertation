@@ -6,7 +6,7 @@ dataset:
     na.str: NA
 
 preprocess:
-    quantile: TRUE
+    quantile: FALSE
     z_score: TRUE
     rm_low_expr_gene: 1
     diploid_norm: FALSE

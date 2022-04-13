@@ -76,7 +76,8 @@ hs_pos_smm = subset(hs, hs$beta > 0) %>% group_by(cancer) %>%
   summarise(count_pos = length(beta))
 hs_neg_smm = subset(hs, hs$beta < 0) %>% group_by(cancer) %>%
   summarise(count_neg = length(beta))
-hs_smm = inner_join(hs_pos_smm, hs_neg_smm, by='cancer')
+hs_smm = full_join(hs_pos_smm, hs_neg_smm, by='cancer')
+hs_smm[is.na(hs_smm)] = 0
 hs_smm = rbind(hs_smm, c('LUAD',0,0))
 hs_smm = rbind(hs_smm, c('OV',0,0))
 hs_smm$count_pos = as.numeric(hs_smm$count_pos)
@@ -95,7 +96,7 @@ ggsave(file.path(plot_out, 'panCan_count_overview.pdf'),
 coll_pos_hs = list()
 for (i in exps){
   # !!! choose sign !!!
-  sub_hs = subset(hs, hs$cancer==i & hs$beta < 0)
+  sub_hs = subset(hs, hs$cancer==i & hs$beta > 0)
   if (nrow(sub_hs)>0){
     sub_hs = sub_hs[order(abs(sub_hs$beta), decreasing = T),]
     # !!! choose which hit mode to use !!!

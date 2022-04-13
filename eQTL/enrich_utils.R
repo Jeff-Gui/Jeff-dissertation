@@ -51,12 +51,18 @@ do_GO = function(df, background=NULL, ont='BP'){
   return(ego)
 }
 
-save_GO = function(ego, filename, dir){
+save_GO = function(ego, filename, dir, cneplt=TRUE){
   tryCatch({
-    plt.list = list(dotplot(ego), cnetplot(ego, showCategory = 3))
+    if (cneplt){
+      plt.list = list(dotplot(ego), cnetplot(ego, showCategory = 3))
+      height = 11.69
+    } else {
+      plt.list = list(dotplot(ego))
+      height = 11.69*0.4
+    }
     marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
       ggsave(file.path(dir, filename),
-             plot=., width=8.27,height=11.69,units='in',device='pdf',dpi=300)
+             plot=., width=8.27,height=height,units='in',device='pdf',dpi=300)
   }, error = function(e){
     plt.list = list(dotplot(ego))
     marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
@@ -85,14 +91,14 @@ load_TRUST_term2gene = function(fp = '/Users/jefft/Desktop/p53_project/datasets/
 }
 
 
-pcs_GO_out = function(ern, pvaluecutoff = 0.05, filename = NULL, dir = NULL){
+pcs_GO_out = function(ern, pvaluecutoff = 0.05, filename = NULL, dir = NULL, cneplt=TRUE){
   if (is.null(ern)){
     return(NULL)
   }
   sig_p = which(ern@result$p.adjust<0.05)
   msg = length(sig_p)
   if (msg > 0){
-    if (!is.null(filename) & !is.null(dir)){save_GO(ern, filename, dir)}
+    if (!is.null(filename) & !is.null(dir)){save_GO(ern, filename, dir, cneplt = cneplt)}
     return(list('n_sig_term' = msg, 'result' = ern@result[sig_p,]))
   } else {
     return(list('n_sig_term' = msg, 'result' = NULL))

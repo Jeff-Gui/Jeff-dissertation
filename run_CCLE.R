@@ -57,7 +57,7 @@ run_bulk_t = function(df, group1, group2, p_mtd='fdr'){
 }
 
 ### Sample size ===
-print(paste(length(hotspot), length(wildtype), length(nonsense), sep='-'))
+print(paste(length(hotspot), length(wildtype), length(nonsense), sep='-')) # 8-13-6
 
 result = list()
 ### RNA: Hotspot VS Wildtype ====
