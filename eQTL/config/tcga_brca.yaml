@@ -13,7 +13,7 @@ preprocess:
 
 eQTL:
     genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv
-    covariate_from_meta: AGE,SEX
+    covariate_from_meta: AGE,SEX,ANEUPLOIDY_SCORE
     covariate_code: GENO
     meta_mut: 
      - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt

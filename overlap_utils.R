@@ -22,8 +22,17 @@ gen_upSet_mtx = function(mylist){
 
 
 get_idx_condt = function(um, test_condition){
-  names(test_condition) = colnames(um)
-  test_condition = test_condition[!is.na(test_condition)]
+  if (is.null(names(test_condition))){
+    names(test_condition) = colnames(um)
+    test_condition = test_condition[!is.na(test_condition)]
+  } else {
+    tcd = rep(NA, ncol(um))
+    names(tcd) = colnames(um)
+    for (i in 1:length(test_condition)){
+      tcd[names(test_condition)[i]] = test_condition[i]
+    }
+    test_condition = tcd[!is.na(tcd)]
+  }
   idx = 1:nrow(um)
   #### get observed value (overlap size)
   for (j in 1:length(test_condition)){
@@ -71,7 +80,23 @@ run_overlap_test = function(um, test_condition, n_loop=1000){
 }
 
 
-load_controls = function(){
+gen_list_from_um = function(um){
+  rt = list()
+  for (i in 1:ncol(um)){
+    rt[[colnames(um)[i]]] = rownames(um)[um[,i]==1]
+  }
+  return(rt)
+}
+
+append_um_col = function(mtx, gene_list, list_name){
+  # append a column to upset matrix
+  rt = gen_list_from_um(mtx)
+  rt = append(rt, list(gene_list))
+  names(rt)[length(names(rt))] = list_name
+  return(gen_upSet_mtx(rt))
+}
+
+load_controls = function(um_to_merge=NULL, ng_ctrs=FALSE, sel_mut=NULL){
   #### load pre-computed CCLE BRCA test
   ccle.brca = read.table('/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/hotspot_comp.txt', sep='\t', header = T)
   ccle.brca.mask = ccle.brca
@@ -89,6 +114,41 @@ load_controls = function(){
   mean_chek1 = mean(peaks$mean_ern.rep1[peaks$gene=='CHEK1'], peaks$mean_ern.rep2[peaks$gene=='CHEK1'])
   peaks = na.omit(peaks)
   peak_over_chek1 = peaks$gene[rowMeans(as.matrix(peaks[,c('mean_ern.rep1', 'mean_ern.rep2')])) >= mean_chek1]
+  
+  rt_list = list('ccle.rna.up'=ccle.rna.up, 'ccle.rnai.down'=ccle.rnai.down, 'ccle.rnai.up.null'=ccle.rna.up.null,
+                 'ccle.crispr.down' = ccle.crispr.down,
+                 'known.wt.up'=known_wt_up, 'known.wt.down'=known_wt_down, 'peak.over.chek1'=peak_over_chek1)
+  
+  #### load negative controls
+  if (ng_ctrs){
+    library(readxl)
+    ctrs_raw = read_xlsx('/Users/jefft/Desktop/p53_project/Thesis/gene_signatures/collection.xlsx')
+    ctrs = na.omit(ctrs_raw)
+    if (!is.null(sel_mut)){
+      ctrs = ctrs[ctrs$Gene %in% sel_mut]
+    }
+    ctrs = ctrs[order(ctrs$Gene_annotation),c('Gene', 'Gene_annotation')]
+    ctrs = ctrs[-which(duplicated(ctrs)),]
+    ng1 = ctrs$Gene[ctrs$Gene_annotation=='wt_control']
+    ng2 = ctrs$Gene[ctrs$Gene_annotation=='wt_control_2']
+    pg = ctrs$Gene[ctrs$Gene_annotation!='wt_control' & ctrs$Gene_annotation!='wt_control_2']
+    if (length(ng1)>0){
+      rt_list[['ng1']] = ng1
+    }
+    if (length(ng2)>0){
+      rt_list[['ng2']] = ng2
+    }
+    if (length(pg)>0){
+      rt_list[['pg']] = pg
+    }
+  }
+  
+  if (!is.null(um_to_merge)){
+    rt_list = append(rt_list, gen_list_from_um(um_to_merge))
+    return(gen_upSet_mtx(rt_list))
+  } else {
+    return(rt_list)
+  }
 }
 
 

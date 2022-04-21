@@ -452,7 +452,7 @@ load_meta_mut = function(meta_mut_fp){
 }
 
 
-load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL){
+load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL, as_df=FALSE){
   beta_val = beta
   # beta: filter absolute effect size
   if (mode == 'fdr'){
@@ -486,7 +486,24 @@ load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL){
       coll[[i]] = NA
     }
   }
-  return(coll)
+  if (!as_df){
+    return(coll)
+  } else {
+    df_coll = data.frame()
+    for (i in names(coll)){
+      nm = toupper(strsplit(i, split='_')[[1]][2])
+      df = coll[[i]]
+      if (class(df)!='logical'){
+        df = subset(df, abs(df$beta) > beta_cutoff)
+        df_coll = rbind(df_coll, df)
+      }
+    }
+    df_coll[['cancer']] = sapply(df_coll$experiment, function(x){
+      return(strsplit(x, split='_')[[1]][2])
+    })
+    df_coll$cancer = toupper(df_coll$cancer)
+    return(df_coll)
+  }
 }
 
 
@@ -637,4 +654,37 @@ annotate_mut_group = function(dt, check_muts, as.mtx=TRUE){
   }
 }
 
+
+gen_bed_GOI = function(GOI, chr_prefix=FALSE, output=NULL, expand=c(-1000,1000),
+                       genepos='/Users/jefft/Desktop/p53_project/scripts/eQTL/hg38_gene_table_autosome.tsv'){
+  if (length(expand)==1){
+    expand = c(-expand[1], expand[1])
+  }
+  # generate bed file for gene of interest
+  df = read.table(genepos, header = T)
+  GOI = intersect(GOI, df$geneid)
+  df = df[df$geneid %in% GOI,]
+  rownames(df) = df$geneid
+  df = df[GOI,]
+  df$chr = gsub('chr','',df$chr)
+  if (chr_prefix){
+    df$chr = paste('chr', df$chr, sep='')
+  }
+  df = df[,c('chr','left','right')]
+  df$left = df$left + expand[1]
+  df$right = df$right + expand[2]
+  for (i in 1:nrow(df)){
+    if (df$left[i]<0){
+      df$left[i] = 0
+    }
+  }
+  rt_df = df
+  rownames(df) = NULL
+  if (!is.null(output)){
+    write.table(df, file.path(output, 'GOI.bed'), sep='\t', quote = F, row.names = F, col.names = F)
+    write.table(paste(rownames(rt_df), '   ', rt_df$chr, ':', rt_df$left,'-', rt_df$right,sep=''), 
+                file.path(output, 'GOI_geneloc.txt'), quote = F, row.names = F, col.names = F)
+  }
+  return(rt_df)
+}
 

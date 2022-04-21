@@ -1,6 +1,6 @@
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 # TCGA-pan_VS-mutneg_ult, TCGA-pan_VS-wt, TCGA-pan_VS-null
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'control')
 data_out = file.path(dir_home, 'data_out')
@@ -323,7 +323,7 @@ marrangeGrob(grobs=plt.list,ncol=1,nrow=3, top = '') %>%
          plot=., height=11.69*0.8, width=8.27*1.1,units='in',device='pdf',dpi=300)
 
 ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_Ctr_BRCA_legend.pdf'),
-       plot=plt.list[[3]] + theme(legend.position = 'bottom'), 
+       plot=plt.list[[3]] + theme(legend.position = 'bottom', legend.direction = 'horizontal'), 
        height=8, width=12,units='in',device='pdf',dpi=300)
 
 ### Conflicting result ===

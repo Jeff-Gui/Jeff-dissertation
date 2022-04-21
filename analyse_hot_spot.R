@@ -10,6 +10,7 @@ source('utils.R')
 source('enrich_utils.R')
 source('../ccle_utils.R')
 source('../overlap_utils.R')
+source('../revigo_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 library(tidyverse)
 library(stringr)
@@ -84,20 +85,33 @@ hs_smm$count_pos = as.numeric(hs_smm$count_pos)
 hs_smm$count_neg = as.numeric(hs_smm$count_neg)
 hs_smm = hs_smm[order(hs_smm$count_pos,decreasing = T),]
 hs_smm$cancer = factor(hs_smm$cancer, levels = hs_smm$cancer)
-g = ggplot(hs_smm %>% gather(key='sign', value='Count', 2:3)) +
-  geom_bar(aes(x=cancer,y=Count,fill=sign),stat='identity', position = 'dodge') +
-  scale_y_continuous(expand = c(0,0)) +
-  labs(x='') + scale_fill_d3(name='',labels = c('Negative', 'Positive')) +
+# normalize with mutant sample size
+ssize = read.table(file.path(dir_home, 'sample_size.txt'), header = T)
+ssize = ssize[ssize$Mutation=='hot_spot',]
+hs_smm$mutant_size = 0
+for (i in 1:nrow(hs_smm)){
+  if (hs_smm$cancer[i] %in% ssize$Cancer){
+    hs_smm$mutant_size[i] = ssize[ssize$Cancer==hs_smm$cancer[i],'Mutant']
+  }
+}
+g = ggplot(hs_smm %>% gather(key='sign', value='Count', 2:3),
+           aes(x=cancer,y=Count/mutant_size)) +
+  geom_bar(aes(fill=sign),stat='identity', position = 'dodge') +
+  scale_y_continuous(expand = expansion(mult = c(0,0.2))) +
+  geom_text(aes(label=paste(Count, mutant_size, sep='/'), group=sign), 
+            position = position_dodge(width=0.9), vjust=-0.5, size=2.5) +
+  labs(x='', y='Gene count / Mutant sample size') + scale_fill_d3(name='',labels = c('Negative', 'Positive')) +
+  # geom_text(label=parse(text="'Not passing\nVAF filter'"), x='LUAD', y=2, size=2.5) +
   mytme + theme(legend.position = c(0.8,0.9))
 ggsave(file.path(plot_out, 'panCan_count_overview.pdf'),
-       plot=g, height=11.69*0.4,width=8.27*0.8,units='in',device='pdf',dpi=300)
+       plot=g, height=11.69*0.4,width=8.27*0.9,units='in',device='pdf',dpi=300)
 
 # Identify common signature across cancers
 coll_pos_hs = list()
 for (i in exps){
   # !!! choose sign !!!
   sub_hs = subset(hs, hs$cancer==i & hs$beta > 0)
-  if (nrow(sub_hs)>0){
+  if (nrow(sub_hs)>0 & !i %in% c('LUAD', 'LUSC')){
     sub_hs = sub_hs[order(abs(sub_hs$beta), decreasing = T),]
     # !!! choose which hit mode to use !!!
     # hits = sub_hs$gene
@@ -232,7 +246,7 @@ for (i in c('overlap_test_Quard_panCan_hotspot_pos.RData',
 }
 print(count-1)
 
-g = upset(upset_mtx_pan, intersect = colnames(upset_mtx_pan), min_size=20,
+g = upset(upset_mtx_pan, intersect = colnames(upset_mtx_pan), min_size=10,
           sort_intersections_by = 'degree', sort_intersections = 'ascending',
           mode = 'inclusive_intersection', width_ratio = 0.1, 
           min_degree=2, set_sizes = FALSE,
@@ -268,6 +282,10 @@ for (i in uquery){
     count = count + 1
     print(id)
     test = do_GO(genes, background = hs$gene[which(hs$beta>0)])
+    ps = pcs_GO_out(test, filename = paste('panCan_posOvl_GO',id,'.pdf',sep=''), 
+                    dir = plot_out, cneplt = F,
+                    size = c(8.27*0.7,11.69*0.5))
+    
     rs = test@result
     rs = rs[rs$p.adjust < 0.05,]
     if (nrow(rs)>0){
@@ -303,7 +321,7 @@ colnames(df_ovl) = c('trh', 'tarGene', 'ctrGene')
 df_ovl = gather(df_ovl, key='gp', value='Count', 2:3)
 df_ovl$gp = factor(df_ovl$gp, levels = c('tarGene', 'ctrGene'))
 g = ggplot(df_ovl, aes(x=trh,y=Count, color=gp)) +
-  geom_vline(xintercept = 4, color='red', size=1) +
+  geom_vline(xintercept = 3, color='red', size=1) +
   geom_line(size=1.5) + geom_point(size=1.5, color='black') + mytme +
   scale_color_d3(palette = 'category20', name='', labels = c('Identified positive genes', 'Positive control genes')) +
   labs(x=str_wrap('Identified in more than # cancer types', width = 20)) +
@@ -323,7 +341,7 @@ colnames(df_ovl) = c('trh', 'tarGene', 'ctrGene.1', 'ctrGene.2')
 df_ovl = gather(df_ovl, key='gp', value='Count', 2:4)
 df_ovl$gp = factor(df_ovl$gp, levels = c('tarGene', 'ctrGene.1', 'ctrGene.2'))
 g = ggplot(df_ovl, aes(x=trh,y=Count, color=gp)) +
-  geom_vline(xintercept = 4, color='red', size=1) +
+  geom_vline(xintercept = 3, color='red', size=1) +
   geom_line(size=1.5) + geom_point(size=1.5, color='black') + mytme +
   scale_color_d3(palette = 'category20', name='', 
                  labels = c('Identified negative genes', 'Negative control genes 1', 'Negative control genes 2')) +
@@ -335,51 +353,37 @@ ggsave(file.path(plot_out, 'panCan_neg_trh.pdf'),
        plot=g, height=11.69*0.4,width=8.27*0.8,units='in',device='pdf',dpi=300)
 
 ### Run GO on degree x genes ====
-deg_trh = 4
+deg_trh = 3
 tar = rownames(upset_mtx_pan[rowSums(upset_mtx_pan) >= deg_trh,])
 # !!! change sign of the background !!!
-test = do_GO(tar, background = hs$gene[which(hs$beta>0)]) # tar: 346 genes degree 3, 74 genes degree 4
-ps = pcs_GO_out(test, filename = 'panCan_pos_trh4_GO.pdf', dir = plot_out)
+test = do_GO(tar, background = hs$gene[which(hs$beta>0)]) # tar: 234 genes degree 3, 74 genes degree 4
+ps = pcs_GO_out(test, filename = 'panCan_pos_trh3_GO.pdf', dir = plot_out, cneplt = F,
+                size = c(8.27*0.7,11.69*0.5)) # width, height
+test_rvg = run_revigo(test)
+test_rvg = test[test@result$ID%in%test_rvg$`Term ID`,]
+repair_genes = strsplit(test_rvg['GO:0000278','geneID'],split='/')[[1]]
+repair_ctr = load_controls(upset_mtx_pan[repair_genes,])
+repair_ctr = repair_ctr[repair_genes,]
 
-test = do_GO(tar, background = hs$gene[which(hs$beta<0)]) # tar: 319 genes, 49 genes degree 4
-ps = pcs_GO_out(test, filename = 'panCan_neg_trh4_GO.pdf', dir = plot_out) # p53 markers
+mean_beta = hs[hs$gene %in% tar,] %>% 
+  group_by(gene) %>% summarise(mbeta=mean(beta))
+
+test = do_GO(tar, background = hs$gene[which(hs$beta<0)]) # tar: 146 genes, 49 genes degree 4
+ps = pcs_GO_out(test, filename = 'panCan_neg_trh3_GO.pdf', dir = plot_out, cneplt = F,
+                size = c(8.27*0.7,11.69*0.5)) # p53 markers
 
 
 # Test hot spot genes in BRCA in CCLE ========
 tcga.brca = subset(df_coll, df_coll$protein_change=='hot_spot' & df_coll$experiment=='tcga_brca_raw_seq')
+tcga.up = tcga.brca$gene[tcga.brca$beta>0]
 
 ## Load controls ====
-### load TCGA-BRCA hotspot VS nonsense (p sig, no p adj)
-tcga.brca.ns = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-null/outputs/tcga_brca_raw_seq/trans_eqtl.txt', header = T)
-tcga.brca.ns = tcga.brca.ns[tcga.brca.ns$protein_change=='hot_spot',]
-tcga.ns.up = tcga.brca.ns$gene[tcga.brca.ns$beta > 0]
-### load pre-computed CCLE BRCA test
-ccle.brca = read.table(file.path(ccle_home, 'BRCA/hotspot_comp.txt'), sep='\t', header = T)
-### load literature control
-known_target = read.table('/Users/jefft/Desktop/p53_project/datasets/Fischer2017/TableS2.txt', header = T)
-### load H1299 R273H ChIP-seq
-peaks = read.table('/Users/jefft/Desktop/p53_project/datasets/PRJEB20314/p53-1-2-merged_Peaks.txt', header = T)
-
-known_wt_up = known_target$Gene.Symbol[known_target$sum.direct.regulation.score...16..0..16. >= 2]
-known_wt_down = known_target$Gene.Symbol[known_target$sum.direct.regulation.score...16..0..16. <= -2]
-mean_chek1 = mean(peaks$mean_ern.rep1[peaks$gene=='CHEK1'], peaks$mean_ern.rep2[peaks$gene=='CHEK1'])
-peaks = na.omit(peaks)
-peak_over_chek1 = peaks$gene[rowMeans(as.matrix(peaks[,c('mean_ern.rep1', 'mean_ern.rep2')])) >= mean_chek1]
-tcga.up = tcga.brca$gene[tcga.brca$beta > 0]
-ccle.brca.mask = ccle.brca
-ccle.brca.mask[is.na(ccle.brca.mask)] = 0
-ccle.rna.up = ccle.brca.mask$gene[ccle.brca.mask$rna_hs.wt_dif > 0 & ccle.brca.mask$rna_hs.wt_p < 0.05]
-ccle.rnai.down = ccle.brca.mask$gene[ccle.brca.mask$rnai_hs.wt_dif < 0 & ccle.brca.mask$rnai_hs.wt_p < 0.05]
-ccle.crispr.down = ccle.brca.mask$gene[ccle.brca.mask$crispr_hs.wt_dif < 0 & ccle.brca.mask$crispr_hs.wt_p < 0.05] # nothing if use padj
-ccle.rna.up.null = ccle.brca.mask$gene[ccle.brca.mask$rna_hs.ns_dif > 0 & ccle.brca.mask$rna_hs.ns_p < 0.05]
-
-mylist = list('Positive controls' = pos.ctrs,
-              'TCGA RNA up' = tcga.up, 
-              # 'tcga.ns.up' = tcga.ns.up,
-              'CCLE RNA up' = ccle.rna.up, 'CCLE RNA NS up' = ccle.rna.up.null,
-              'CCLE RNAi down' = ccle.rnai.down, 'CCLE CRISPR down' = ccle.crispr.down,
-              'known_wt_up' = known_wt_up, 'known_wt_down' = known_wt_down,
-              'R273H ChIP peaks' = peak_over_chek1)
+mylist = load_controls(ng_ctrs = T)
+names(mylist) = c('CCLE RNA up', 'CCLE RNAi down', 'CCLE RNA NS up','CCLE CRISPR down', 
+                  'known_wt_up', 'known_wt_down', 'R273H ChIP peaks',
+                  'ng1', 'ng2', 'Positive controls')
+mylist[['TCGA RNA up']] = tcga.up
+mylist = mylist[setdiff(names(mylist), c('ng1', 'ng2'))]
 
 um = gen_upSet_mtx(mylist)
 um = um[um$known_wt_up==0 & um$known_wt_down==0,]
@@ -401,6 +405,7 @@ g = upset(um_plt, colnames(um_plt), min_size = 1, width_ratio = 0.15,
       queries = list(upset_query(set='Positive controls', color='#2CA02CFF', fill='#2CA02CFF'),
                      upset_query(set='TCGA RNA up', color='#1F77B4FF', fill='#1F77B4FF'),
                      upset_query(intersect=c('TCGA RNA up', 'R273H ChIP peaks'), fill='#FF7F0EFF', color='#FF7F0EFF'),
+                     upset_query(intersect=c('TCGA RNA up', 'CCLE RNA NS up'), fill='#FF7F0EFF', color='#FF7F0EFF'),
                      upset_query(intersect=c('TCGA RNA up', 'CCLE RNA up'), fill='#FF7F0EFF', color='#FF7F0EFF'),
                      upset_query(intersect=c('TCGA RNA up', 'CCLE RNA up', 'CCLE RNA NS up'), fill='#FF7F0EFF', color='#FF7F0EFF'),
                      upset_query(intersect=c('TCGA RNA up', 'R273H ChIP peaks', 'CCLE RNAi down'), fill='#FF7F0EFF', color='#FF7F0EFF'),
@@ -428,57 +433,94 @@ ggsave(file.path(plot_out, 'BRCA', 'upset.pdf'),
 # bg = rownames(mtx)[which(mtx$BRCA==1)]
 bg = tcga.brca$gene[tcga.brca$beta > 0] # use all identified as bg
 print(colnames(um))
+rownames(tcga.brca) = tcga.brca$gene
+tcga.brca = tcga.brca[order(tcga.brca$beta, decreasing = T),]
 # ChIP and TCGA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,NA,NA,T))] # 575 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,NA,NA,NA,T,NA,T))] # 584 genes
+
+## gsea
+to_gsea = tcga.brca[gene,'beta']
+names(to_gsea) = gene
+to_gsea = sort(to_gsea, decreasing = T)
+# plot(to_gsea)
+test_kegg = do_GSEA(to_gsea, pvalue=1)
+rs = test_kegg@result[which(test_kegg@result$qvalues<0.25),]
+gseaplot2(test_kegg,1)
+
 test = do_GO(gene, background = bg, ont='BP')
+sign1 = ext_gene_GO(test@result$geneID[1:5], do_intersect = F)
 g = dotplot(test) + labs(title= 'TCGA RNA up X ChIP-seq peaks')
 ggsave(file.path(plot_out,'BRCA', '1_chip-tcga_GO.pdf'),
        width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # TCGA RNA and CCLE RNA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,NA))] # 527 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,NA,NA,NA,NA,T))] # 565 genes
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X CCLE RNA up') # nothing
+# TCGA RNA and CCLE RNA NS
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,NA,T,NA,NA,NA,T))] # 192 genes
+test = do_GO(gene, background = bg, ont='BP')
+sign3 = ext_gene_GO(test@result$geneID[1:5], do_intersect = F)
+g = dotplot(test) + labs(title= 'TCGA RNA up X CCLE RNA NS up')
+ggsave(file.path(plot_out,'BRCA', '3_ccleNS-tcga_GO.pdf'),
+       width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # ChIP and TCGA, RNAi
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,T,NA,T))] # 20 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,NA,NA,T,NA,T))] # 13 genes
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X ChIP-seq peaks X CCLE RNAi down') # nothing
 # ChIP and TCGA, CCLE RNA
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,NA,NA,NA,T))] # 92 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,NA,NA,T,NA,T))] # 109 genes
 test = do_GO(gene, background = bg, ont='BP')
 wnt_genes = test@result$geneID[1]
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X ChIP-seq peaks X CCLE RNA up', width=28))
-ggsave(file.path(plot_out,'BRCA', '4_chip-tcga-CCLE_GO.pdf'),
+ggsave(file.path(plot_out,'BRCA', '5_chip-tcga-CCLE_GO.pdf'),
        width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # TCGA and CCLE RNA and CCLE RNA ns
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,T,NA,NA,NA))] # 96 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,NA,NA,T))] # 100 genes
 test = do_GO(gene, background = bg, ont='BP') # nothing
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X CCLE RNA up X CCLE NS RNA up', width = 28))
 # ChIP and TCGA, CCLE RNA, CCLE RNA NS
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,T,T,T,NA,NA,T))] # 21 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,T,NA,T))] # 21 genes
 test = do_GO(gene, background = bg, ont='BP') # nothing
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X ChIP-seq peaks X CCLE RNA up X CCLE RNA NS up', width=28))
 
+### Profile microtubule genes ====
+sign3_mtx = um[rownames(um) %in% sign3,]
+rownames(sign3_mtx[sign3_mtx$`CCLE RNA up`==1,])
+sign1_mtx = um[rownames(um) %in% sign1,]
+rownames(sign1_mtx[sign1_mtx$`CCLE RNA up`==1 & sign1_mtx$`CCLE RNA NS up`==1,])
+
 ### Profile wnt signalling genes ====
 # wnt_genes = strsplit(wnt_genes, split='/')[[1]]
-wnt_genes = c("FZD9","GPRC5B","RUVBL1","CSNK2A1","RPS12","RNF220","TNFAIP3")
+## from wnt signature (old)
+GOI = c("FZD9","GPRC5B","RUVBL1","CSNK2A1","RPS12","RNF220","TNFAIP3")
+## top 5 rna regulation terms (sign1)
+GOI = c("BYSL","NCL","PPIH","THOC5")
+## top 5 microtubule & mitosis terms (sign3)
+GOI = c("ARHGEF2","CDC20","CHEK2","CRYAB","KIF4A","KIFC3","MAP7D3","MYH9","RCC1", "STIL","SUN2")
+## sign1 and sign3 with ChIP peak, CCLE NS
+GOI = c("BYSL","NCL","PPIH","THOC5",'ARHGEF2', 'CDC20')
+
 dt.tcga = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData', 
                           ann_bin_mut_list = c('hot_spot'), mode='tcga')
 dt.ccle = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData',
                           ann_bin_mut_list = c('hot_spot'), mode = 'ccle')
-df.tcga = cbind(t(assay(dt.tcga[[1]][wnt_genes,,'RNA'])), as.data.frame(dt.tcga[[1]]@colData[,c('p53_state', 'has_hot_spot')]))
-df.ccle = cbind(t(assay(dt.ccle[[1]][wnt_genes,,'RNA'])), as.data.frame(dt.ccle[[1]]@colData[,c('p53_state', 'has_hot_spot')]))
+df.tcga = cbind(t(assay(dt.tcga[[1]][GOI,,'RNA'])), as.data.frame(dt.tcga[[1]]@colData[,c('p53_state', 'has_hot_spot')]))
+df.ccle = cbind(t(assay(dt.ccle[[1]][GOI,,'RNA'])), as.data.frame(dt.ccle[[1]]@colData[,c('p53_state', 'has_hot_spot')]))
 # !!! choose one !!!
 df.plt = df.ccle
 df.plt = df.tcga
-df.plt = gather(df.plt %>% mutate(sample=rownames(df.plt)), key='gene', value='expression', 1:length(wnt_genes))
-df.plt = df.plt[df.plt$p53_state == 'Wildtype' | (df.plt$p53_state=='missense' & df.plt$has_hot_spot==1),]
+df.plt = gather(df.plt %>% mutate(sample=rownames(df.plt)), key='gene', value='expression', 1:length(GOI))
+df.plt$gene = factor(df.plt$gene, levels=GOI)
+df.plt = df.plt[df.plt$p53_state == 'Wildtype' | (df.plt$p53_state=='missense' & df.plt$has_hot_spot==1) |
+                  (df.plt$p53_state == 'nonsense'),]
 df.plt = df.plt[order(df.plt$gene, df.plt$has_hot_spot),]
-df.plt$sample = factor(df.plt$sample, levels = df.plt$sample[1:(nrow(df.plt)/length(wnt_genes))])
+df.plt$sample = factor(df.plt$sample, levels = df.plt$sample[1:(nrow(df.plt)/length(GOI))])
 myPalette = colorRampPalette(c("#1F77B4FF",'white', '#D62728FF'))
 sc = scale_fill_gradientn(colours = myPalette(50), name='Normalized expression')
-tb = as.numeric(table(df.plt$has_hot_spot))
-df.plt$has_hot_spot[df.plt$has_hot_spot==0] = paste('WT', tb[1] / length(wnt_genes), sep=' n=')
-df.plt$has_hot_spot[df.plt$has_hot_spot==1] = paste('HS', tb[2] / length(wnt_genes), sep=' n=')
+tb = c(sum(df.plt$p53_state=='Wildtype'), sum(df.plt$has_hot_spot==1), sum(df.plt$p53_state=='nonsense'))
+df.plt$has_hot_spot[df.plt$has_hot_spot==0] = paste('WT', tb[1] / length(GOI), sep=' n=')
+df.plt$has_hot_spot[df.plt$has_hot_spot==1] = paste('HS', tb[2] / length(GOI), sep=' n=')
+df.plt$has_hot_spot[df.plt$p53_state=='nonsense'] = paste('NS', tb[3]/length(GOI), sep=' n=')
 g = ggplot(df.plt) +
   geom_tile(aes(x=sample, y=gene, fill=expression), width=1) +
   #geom_vline(xintercept = n_sample[1], size=1, alpha=0.7) +
@@ -492,7 +534,7 @@ g = ggplot(df.plt) +
 # CCLE width: 5, TCGA width: 10
 ggsave(file.path(plot_out,'BRCA', 'WntHeatmapTCGA.pdf'),
        plot = g + theme(legend.key.width = unit(0.4,units = 'inch')),
-       width=8.27*1.4, height=4, units='in', device='pdf', dpi=300, bg = 'transparent')
+       width=8.27*1.5, height=4, units='in', device='pdf', dpi=300, bg = 'transparent')
 ggsave(file.path(plot_out,'BRCA', 'WntHeatmapCCLE.pdf'),
        plot = g + theme(legend.key.width = unit(0.3,units = 'inch')),
        width=8.27*0.6, height=4, units='in', device='pdf', dpi=300, bg = 'transparent')

@@ -40,7 +40,7 @@ for (i in 1:length(mutation_groups)){
 }
 
 tcga_fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData'
-ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData'
+# ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData'
 ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData'
 if (!source){
   # TCGA
@@ -100,6 +100,13 @@ plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
                      layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
   ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/BRCA_triple_sig.pdf',
          plot=., width=12,height=16,units='in',device='pdf',dpi=300)
+
+
+plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
+                           layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/coreVScontact/BRCA/inconsGenes.pdf',
+         plot=., width=12,height=16,units='in',device='pdf',dpi=300)
+
 
 # Control genes conflicting to the literature ====
 mycomp = list('rna'=list(c('Hotspots', 'Wildtype'), c('Nonsense', 'Wildtype')),

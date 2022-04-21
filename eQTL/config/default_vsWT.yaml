@@ -1,4 +1,4 @@
-experiment_home: /Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt
+experiment_home: /Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid
 output: # output folder
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/BRCA-TCGA/brca_tcga_pan_can_atlas_2018

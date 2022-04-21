@@ -7,7 +7,7 @@ source('enrich_utils.R')
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 # TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'GO') # GO or GO_MF
 data_out = file.path(dir_home, 'data_out')
@@ -65,16 +65,16 @@ write.table(sry, file.path(dir_home, 'output_summary.txt'), row.names = F, quote
 
 
 ## do volcano plot
-hist(df_coll$beta,breaks=100)
-ggplot(df_coll) +
-  geom_histogram(aes(x=beta), binwidth = 0.01)
-g = ggplot(df_coll) +
-  geom_point(aes(x=beta, y=-log10(FDR), color=experiment),size=0.5) +
-  geom_vline(xintercept = 0.5, linetype='dotted', color='black') +
-  mytme + theme(legend.text = element_text(size=12)) +
-  geom_vline(xintercept = -0.5, linetype='dotted', color='black')
-ggsave(file.path(dirname(plot_out), 'Volcano_overview.png'),
-       plot=g, width=8.27*1.2,height=11.69*0.5,units='in',device='png',dpi=300)
+# hist(df_coll$beta,breaks=100)
+# ggplot(df_coll) +
+#   geom_histogram(aes(x=beta), binwidth = 0.01)
+# g = ggplot(df_coll) +
+#   geom_point(aes(x=beta, y=-log10(FDR), color=experiment),size=0.5) +
+#   geom_vline(xintercept = 0.5, linetype='dotted', color='black') +
+#   mytme + theme(legend.text = element_text(size=12)) +
+#   geom_vline(xintercept = -0.5, linetype='dotted', color='black')
+# ggsave(file.path(dirname(plot_out), 'Volcano_overview.png'),
+#        plot=g, width=8.27*1.2,height=11.69*0.5,units='in',device='png',dpi=300)
 
 # df_coll_hs = subset(df_coll, df_coll$protein_change=='hot_spot')
 # ggplot(df_coll) +
@@ -107,6 +107,7 @@ if (cache){
   min_gene = 20  # TODO?
   result = data.frame()
   go_coll = list()
+  no_GO = TRUE
   for (epr in unique(df_coll$experiment)){
     bg = rownames(mtx)[which(mtx[,toupper(strsplit(epr, split='_')[[1]][2])]==1)]
     df = subset(df_coll, df_coll$experiment == epr)
@@ -125,7 +126,11 @@ if (cache){
       fsx_shot = c('pos', 'pos_TF', 'neg', 'neg_TF')
       for (gp in list(df_up, df_down)){
         if (nrow(gp)>min_gene){
-          up_GO = do_GO(gp, background = bg, ont = ont)
+          if (no_GO){
+            up_GO = NULL
+          } else {
+            up_GO = do_GO(gp, background = bg, ont = ont)
+          }
           if (is.null(up_GO)){
             msg[cot] = 0
           } else {
@@ -140,9 +145,13 @@ if (cache){
         }
         if (nrow(gp)>min_gene){
           if (length(intersect(gp$gene, term2gene$gene))!=0){
-            ern = enricher(gp$gene, TERM2GENE = term2gene,
-                           universe = intersect(term2gene$gene, bg),
-                           pvalueCutoff = 0.05)
+            if (no_GO){
+              ern = NULL
+            } else {
+              ern = enricher(gp$gene, TERM2GENE = term2gene,
+                             universe = intersect(term2gene$gene, bg),
+                             pvalueCutoff = 0.05)
+            }
             if (is.null(ern)){
               msg[cot+1] = 0
             } else {

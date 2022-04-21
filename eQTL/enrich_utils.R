@@ -3,6 +3,8 @@ library(clusterProfiler)
 library(org.Hs.eg.db)
 library(GO.db)
 library(gridExtra)
+library(enrichplot)
+
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 
 ann_GO = function(gene_list, category='BP'){
@@ -51,8 +53,10 @@ do_GO = function(df, background=NULL, ont='BP'){
   return(ego)
 }
 
-save_GO = function(ego, filename, dir, cneplt=TRUE){
+save_GO = function(ego, filename, dir, cneplt=TRUE,size=NULL){
   tryCatch({
+    width = 8.27
+    height = 11.69
     if (cneplt){
       plt.list = list(dotplot(ego), cnetplot(ego, showCategory = 3))
       height = 11.69
@@ -60,14 +64,18 @@ save_GO = function(ego, filename, dir, cneplt=TRUE){
       plt.list = list(dotplot(ego))
       height = 11.69*0.4
     }
+    if (!is.null(size)){
+      width = size[1]
+      height = size[2]
+    }
     marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
       ggsave(file.path(dir, filename),
-             plot=., width=8.27,height=height,units='in',device='pdf',dpi=300)
+             plot=., width=width,height=height,units='in',device='pdf',dpi=300)
   }, error = function(e){
     plt.list = list(dotplot(ego))
     marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
       ggsave(file.path(dir, filename),
-             plot=., width=8.27,height=11.69,units='in',device='pdf',dpi=300)
+             plot=., width=width,height=height,units='in',device='pdf',dpi=300)
   })
 }
 
@@ -91,14 +99,14 @@ load_TRUST_term2gene = function(fp = '/Users/jefft/Desktop/p53_project/datasets/
 }
 
 
-pcs_GO_out = function(ern, pvaluecutoff = 0.05, filename = NULL, dir = NULL, cneplt=TRUE){
+pcs_GO_out = function(ern, pvaluecutoff = 0.05, filename = NULL, dir = NULL, cneplt=TRUE, size=NULL){
   if (is.null(ern)){
     return(NULL)
   }
   sig_p = which(ern@result$p.adjust<0.05)
   msg = length(sig_p)
   if (msg > 0){
-    if (!is.null(filename) & !is.null(dir)){save_GO(ern, filename, dir, cneplt = cneplt)}
+    if (!is.null(filename) & !is.null(dir)){save_GO(ern, filename, dir, cneplt = cneplt, size=size)}
     return(list('n_sig_term' = msg, 'result' = ern@result[sig_p,]))
   } else {
     return(list('n_sig_term' = msg, 'result' = NULL))
@@ -165,7 +173,7 @@ get_DEG = function(x, gene_nm='gene', es_nm='beta',
 
 
 do_GSEA = function(gene, kegg_fp = '/Users/jefft/Genome/c2.cp.kegg.v7.5.1.symbols.gmt',
-                   rank_nm = 'beta', gene_nm = 'gene'){
+                   rank_nm = 'beta', gene_nm = 'gene', pvalue=0.05){
   if (typeof(gene)=='list'){
     gene = gene[order(gene[[rank_nm]], decreasing = T),]
     gene_nm = gene[[gene_nm]]
@@ -182,7 +190,8 @@ do_GSEA = function(gene, kegg_fp = '/Users/jefft/Genome/c2.cp.kegg.v7.5.1.symbol
   } else {
     st = 'std'
   }
-  gsea = GSEA(gene, TERM2GENE = kegg_gmt, pvalueCutoff = 0.05, scoreType=st)
+  gsea = GSEA(gene, TERM2GENE = kegg_gmt, pvalueCutoff = pvalue, scoreType=st,
+              pAdjustMethod='fdr')
   return(gsea)
 }
 

@@ -195,6 +195,11 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
       df_plt = subset(df_plt, df_plt$itg_state != 'Nonsense')
     }
     
+    tukey = NULL
+    if ('TCGA' %in% df_plt$db){
+      anova_mod = aov(gene_expr~itg_state, data = df_plt[df_plt$db=='TCGA',])
+      tukey = TukeyHSD(anova_mod)$itg_state
+    }
     if (no_plot){
       a = NULL
     } else {
@@ -221,7 +226,7 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
       }
     }
     
-    
+  
     if (flag & !no_plot){
       b = ggplot(subset(df_plt, df_plt$db=='CCLE' & !is.na(df_plt$gene_rnai)), 
                  aes(x=itg_state, y=gene_rnai)) +
@@ -249,7 +254,7 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
         rt_list[[paste(gene, 'rnai', sep='_')]] = ggplot()
       }
     }
-    rt_df_lst[[gene]] = df_plt
+    rt_df_lst[[gene]] = list('sample'=df_plt, 'tukey'=tukey)
   }
   if (!no_plot){
     return(list('plots'=rt_list, 'data'=rt_df_lst))

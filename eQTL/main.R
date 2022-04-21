@@ -24,8 +24,8 @@ config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.y
 
 for (config_name in config_names) {
   refresh_log = TRUE
-  save_intermediate = TRUE  # may spend extra time
-  use_cache = FALSE
+  save_intermediate = FALSE  # may spend extra time
+  use_cache = TRUE
   use_cache_geno_pca = TRUE
   source = TRUE
   
@@ -159,6 +159,7 @@ for (config_name in config_names) {
   }
   gene = as.matrix(gene)
   cvrt = as.matrix(cvrt)
+  loginfo(logger = 'main', paste('Using coveriates: ', rownames(cvrt), sep=''))
   
   cis_qtls_coll = list()
   trans_qtls_coll = list()
