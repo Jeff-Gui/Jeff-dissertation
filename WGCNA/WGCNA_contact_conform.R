@@ -4,27 +4,15 @@ library(tidyverse)
 library(RColorBrewer)
 setwd('/Users/jefft/Desktop/p53_project')
 source('scripts/eQTL/utils.R')
-source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+source('scripts/set_theme.R')
 
-# load dataset
-load('datasets/9-BRCA-TCGA/clean_data_WGCNA.RData')
-p53_ann = annotate_sample_mut(dt[[2]]@data)
-dt[[1]]@colData[['p53_state']] = 'wildtype'
-for (i in names(p53_ann)){
-  dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
-}
-b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, mode = 'position-tcga', 
-                                samples = rownames(dt[[1]]@colData), snp_list = list(c(273, 248)))
-dt[[1]]@colData[rownames(b_m)[which(b_m==1)], 'p53_state'] = 'MS-contact'
-b_m = get_binary_SNP_m_from_maf(dt[[2]]@data, mode = 'position-tcga', 
-                                samples = rownames(dt[[1]]@colData), snp_list = list(c(175,245,249,282)))
-dt[[1]]@colData[rownames(b_m)[which(b_m==1)], 'p53_state'] = 'MS-conform'
-dt[[1]]@colData[['genotype']] = dt[[1]]@colData$p53_state
-table(dt[[1]]@colData$p53_state)
+# load dataset ====
+dt = load_clean_data('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data_noRankNorm.RData',
+                ann_bin_mut_list = c('contact','conformation','sandwich'))
 # load WGCNA result
 load('scripts/WGCNA/outputs/tcga_brca_raw_seq/WGCNA_network.RData')
 coldt = dt[[1]]@colData
-ME_p53 = cbind(MEs, coldt[rownames(MEs), c('p53_state', 'genotype')])
+ME_p53 = cbind(MEs, coldt[rownames(MEs), c('p53_state', 'has_contact')])
 ggplot(ME_p53) +
   geom_point(aes(x=MEblack, y=MEpurple, color=p53_state)) +
   facet_wrap(~p53_state)

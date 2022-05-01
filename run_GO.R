@@ -6,7 +6,7 @@ source('utils.R')
 source('enrich_utils.R')
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
-# TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt
+# TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt TCGA-pan_VS-wt_ploid
 dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'GO') # GO or GO_MF

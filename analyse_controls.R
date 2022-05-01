@@ -13,7 +13,7 @@ library(RColorBrewer)
 library(ggsci)
 source('utils.R')
 source('../ccle_utils.R')
-source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+source('../set_theme.R')
 
 gc()
 # output_fp = 'outputs/TEST_BRCA'
@@ -113,8 +113,9 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                         wrong_hit=length(which(wrong==FALSE)),
                                         not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
-print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
-print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
+sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
+print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
+print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
 ftr_ctr1 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr1)
@@ -122,8 +123,8 @@ ctr1_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Negative controls 1') +
-  scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
+  labs(y='Count', x='', title='Downregulate controls 1') +
+  scale_fill_d3(palette = 'category20', name = '', labels = c('Recovered','Not recovered','Recovered with the wrong sign')) +
   mytme + xtme
 sm_tb_ctr1 = sm_tb[sm_tb$gp=='hit',]
 
@@ -135,8 +136,9 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                                 wrong_hit=length(which(wrong==FALSE)),
                                                 not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
-print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
-print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
+sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
+print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
+print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
 ftr_ctr2 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr2)
@@ -144,7 +146,7 @@ ctr2_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Negative controls 2') +
+  labs(y='Count', x='', title='Downregulate controls 2') +
   scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
   mytme + xtme + theme(legend.position = 'none')
 sm_tb_ctr2 = sm_tb[sm_tb$gp=='hit',]
@@ -157,8 +159,9 @@ sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==FALSE)),
                                                 wrong_hit=length(which(wrong==TRUE)),
                                                 not_detected=sum(is.na(beta)))
 sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
-print(sd(sm_tb$hit / rowSums(sm_tb[,2:4])))
-print(mean((sm_tb$hit / rowSums(sm_tb[,2:4]))))
+sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
+print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
+print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
 ftr_pos = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_pos)
@@ -166,7 +169,7 @@ pos_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Positive controls') +
+  labs(y='Count', x='', title='Upregulate controls') +
   scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
   mytme + xtme + theme(legend.position = 'none')
 sm_tb_pos = sm_tb[sm_tb$gp=='hit',]
@@ -194,9 +197,16 @@ rank_pfl = ggplot(mtx) +
   labs(x='', y='Sum of hit counts') +
   scale_fill_d3() +
   mytme +xtme
-marrangeGrob(grobs=list(ctr1_count, ctr2_count, pos_count, rank_pfl),ncol=2,nrow=2, top='') %>% 
+marrangeGrob(grobs=list(rank_pfl, ctr1_count + theme(legend.position = 'none'), 
+                        ctr2_count, pos_count),ncol=4,nrow=1, top='') %>% 
   ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount.pdf'),
-         plot=., width=11.69*0.7,height=8.27*0.9,units='in',device='pdf',dpi=300)
+         plot=., width=11.69*1.5,height=8.27*0.5,units='in',device='pdf',dpi=300)
+ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount_legend.pdf'),
+       plot=ctr1_count, width=11.69*0.7,height=8.27*0.5,units='in',device='pdf',dpi=300)
+
+# marrangeGrob(grobs=list(rank_pfl, ctr1_count, pos_count, ctr2_count),ncol=2,nrow=2, top='') %>% 
+#   ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount.pdf'),
+#          plot=., width=11.69*0.7,height=8.27*0.9,units='in',device='pdf',dpi=300)
 
 # Annotate mutant passing QC or not
 ctr_long$mut_ann = FALSE
@@ -273,31 +283,36 @@ ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_legend.pdf'),
 
 ### Plot individual panel for breast cancer Fig 1B ====
 plt.list = list()
-myPalette = colorRampPalette(c("royalblue", '#D62728FF'))
+myPalette = colorRampPalette(c("#9467BDFF", '#D62728FF'))
 up_p = ceiling(-log10(min(ctr_long_breast$FDR, na.rm = T)))
 print(up_p)
 sc = scale_colour_gradientn(colours = myPalette(50), 
                             limits=c(0, up_p),breaks = c(0,2,4,8,16), trans = 'log1p')
+sc = scale_colour_gradientn(colours = myPalette(50), 
+                            limits=c(0, up_p),breaks = c(0,8,16))
 ssp = scale_size_continuous(limits = c(0,ceiling(max(abs(ctr_long_breast$beta), na.rm=T))))
 ctr_long_plt_3 = subset(ctr_long_breast, !ctr_long_breast$Gene_annotation %in% c('wt_control', 'wt_control_2'))
 ctr_long_plt_1 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control')
 ctr_long_plt_2 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control_2')
 df_list = list(ctr_long_plt_1, ctr_long_plt_2, ctr_long_plt_3)
-tle = c('BRCA Negative controls 1', 'BRCA Negative controls 2', 'BRCA Positive controls')
+tle = c('BRCA downregulate controls 1', 'BRCA downregulate controls 2', 'BRCA upregulate controls')
 for (j in 1:length(df_list)){
   ctr_long_plt = df_list[[j]]
   for (i in unique(ctr_long_plt$experiment)){
     ctr_long_sub = subset(ctr_long_plt, ctr_long_plt$experiment==i)
+    ctr_long_sub$beta[ctr_long_sub$FDR>=0.05] = NA
+    ctr_long_sub$FDR[ctr_long_sub$FDR>=0.05] = NA
     test = as.character(unique(ctr_long_sub$mutation[ctr_long_sub$mut_ann==FALSE]))
     g = ggplot(ctr_long_sub) +
       geom_point(aes(x=Gene, y=mutation, size=abs(beta), 
                      color=-log10(FDR), shape=wrong), stroke=2) +
-      scale_shape_manual(name='', label=c('Positive', 'Negative'), limits = c(FALSE, TRUE), values = c(1,2)) +  # 16 17
+      scale_shape_manual(name='', label=c('Positive', 'Negative'), limits = c(FALSE, TRUE), values = c(16,17)) +  # 16 17 or 1 2
       sc + ssp +
       mytme +
-      geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
-                 aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
+      # geom_point(data = subset(ctr_long_sub, FDR < 0.05), 
+      #            aes(x=Gene, y=mutation), shape = '*', size=6, color='black') +
       labs(x='', y='', title = tle[j]) +
+      scale_y_discrete(position = 'right') +
       theme(strip.background = element_rect(fill=NA), 
             strip.text = element_text(face='bold', color='black', size=12),
             axis.text.x = element_text(hjust = 1, vjust=0.5, size=12, angle = 90, face='italic'),
@@ -343,7 +358,7 @@ names(mutation_groups) = c('Hotspots')
 plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups, 
                     primary_site = 'Breast', rnai = NULL, 
                     comparison = list('rna'=list(c('Hotspots', 'Wildtype'))),
-                    no_ccle = TRUE, plot_n = FALSE, plot_nonsense = F)
+                    no_ccle = TRUE, plot_n = T, plot_nonsense = F)
 
 for (i in 1:length(plt$plots)){
   plt$plots[[i]] = plt$plots[[i]] + labs(x='',y=toupper(strsplit(names(plt$plots)[i], split='_')[[1]][1]))

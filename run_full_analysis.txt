@@ -1,0 +1,7 @@
+1. Check the master config file in scripts/eQTL/config
+* pay attention to these fields: 
+-- experiment_home: the output folder
+2. Check the sub-cancer config file
+-- check coveriates
+
+3. Run main.R, check using cache or not.

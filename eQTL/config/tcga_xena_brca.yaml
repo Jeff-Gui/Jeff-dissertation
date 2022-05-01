@@ -1,0 +1,20 @@
+output: outputs/tcga_gtex_brca
+dataset:
+    dataset_home: /Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA-GTEX/foo
+    has_log_ed: FALSE
+    exp_nm: data_mrna_seq_v2_rsem.txt
+    na.str: 
+
+preprocess:
+    quantile: FALSE
+    z_score: TRUE
+    rm_low_expr_gene: 1
+    diploid_norm: FALSE
+
+eQTL:
+    genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv
+    # covariate_from_meta: AGE,SEX,ANEUPLOIDY_SCORE
+    covariate_from_meta: AGE,SEX
+    covariate_code: GENO
+    meta_mut: 
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/all.txt

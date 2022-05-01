@@ -13,6 +13,7 @@ source('../revigo_utils.R')
 library(tidyverse)
 library(stringr)
 library(ggvenn)
+library(ggsci)
 
 
 # load gene
@@ -59,9 +60,10 @@ ggsave(file.path(plot_out, 'count_overview.pdf'),
 
 
 # Gene overlap ====
+library(ComplexUpset)
 df_coll$protein_change = gsub('p\\.','',df_coll$protein_change)
 ## !!! change sign !!!
-df_coll_pos = subset(df_coll, df_coll$beta > 0 & df_coll$cancer != 'STAD') # too few in STAD
+df_coll_pos = subset(df_coll, df_coll$beta > 0) # too few in STAD
 df_coll_pos = df_coll_pos[order(df_coll_pos$beta, decreasing = T),]
 gene_coll = list()
 for (i in unique(df_coll_pos$protein_change)){
@@ -159,21 +161,4 @@ g = ggplot(top5term_df[(nrow(top5term_df)-5):nrow(top5term_df),]) + scale_x_cont
 ggsave(file.path(plot_out, 'panMut_pos_upset_GO.pdf'),
        plot=g, height=11.69*0.3,width=8.27*0.5,units='in',device='pdf',dpi=300)
 
-rownames(um)[get_idx_condt(um,c(T,T,T,T,T))]
-
-# Cancer specific signature
-ont = 'BP'
-coll = list()
-go_list = list()
-for (i in unique(df_coll_pos$cancer)){
-  gs = subset(df_coll_pos, df_coll_pos$cancer==i)$gene
-  coll[[i]] = gs
-  test = do_GO(gs[which(!gs %in% check)], background = unique(df_coll_pos$gene), ont = ont)
-  rvg = run_revigo(test@result[,c('ID', 'pvalue')])
-  test@result = subset(test@result, ID %in% rvg$`Term ID`)
-  go_list[[i]] = pcs_GO_out(test, dir = plot_out, filename = paste('R273H_', i, '_', ont, '_specific.pdf', sep=''))
-}
-g = ggvenn(coll, stroke_color = 'white')
-g %>% ggsave(file.path(plot_out, paste('R273H_BRCA-COAD_pos_co_gene.pdf', sep='')),
-             plot=., width=4,height=4,units='in',device='pdf',dpi=300)
 

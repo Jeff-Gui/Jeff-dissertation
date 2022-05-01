@@ -8,7 +8,8 @@ data_out = file.path(dir_home, 'data_out')
 source('utils.R')
 source('enrich_utils.R')
 source('../ccle_utils.R')
-source('/Users/jefft/Desktop/Manuscript/set_theme.R')
+source('../set_theme.R')
+source('../revigo_utils.R')
 library(tidyverse)
 library(stringr)
 library(ggvenn)
@@ -90,6 +91,7 @@ save(ccle.core, ccle.contact, file = file.path(data_out, 'ccle_breast_ContactCor
 # Gene ====
 ## Load dt ====
 load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
+mtx = as.data.frame(mtx)
 # load(file.path(data_out, 'ccle_breast_ContactCorevsWT_allgenes.RData'))
 beta_cutoff=0
 coll = load_eQTL_output(eqtl_out, beta=beta_cutoff, exclude = 'tcga_nine_pool')
@@ -161,18 +163,26 @@ remove(hs_mtx_coll)
 
 # Breast cancer ====
 ont = 'BP'
-sub_folder = 'LGG' # BRCA
+sub_folder = 'BRCA' # BRCA
 
 uni_bg = rownames(mtx)[mtx[, sub_folder]==1]
 tissue_qtl = df_coll[grep(tolower(sub_folder), df_coll$experiment),]
+#### Filter inconsistent genes in all ====
+incons = c()
+for (i in unique(tissue_qtl$gene)){
+  if (length(unique(tissue_qtl[tissue_qtl$gene==i, 'beta']>0))>1){
+    incons = c(incons, i)
+  }
+}
+
 co_core_contact = get_intersection_eqtl(tissue_qtl, group_col = 'protein_change')
 wide = spread(co_core_contact[c('gene','protein_change','beta')], key = protein_change, value=beta)
 
-#### Filter consistent genes ====
+#### Filter inconsistent genes in the core ====
 cst_gene = wide$gene[which(wide$conformation * wide$contact > 0 & wide$conformation * wide$sandwich > 0)]
 print(paste('All in the core set:', nrow(wide), ', Same sign:', length(cst_gene)))
 uncon_wide = wide[!wide$gene %in% cst_gene,]
-print(uncon_wide) # NFATC1, PDZD4
+print(uncon_wide) # NFATC1, PDZD4 (?)
 wide = subset(wide, wide$gene %in% cst_gene)
 wide[['mean_beta']] = rowMeans(wide[,2:4])
 
@@ -181,6 +191,8 @@ pos_um_tis = pos_um[[sub_folder]]
 neg_um_tis = neg_um[[sub_folder]]
 bg_pos = rownames(pos_um_tis)
 bg_neg = rownames(neg_um_tis)
+write.table(bg_pos, file.path(data_out, 'brca_strc_bg_pos.txt'), quote = F, row.names = F, col.names = F)
+write.table(bg_neg, file.path(data_out, 'brca_strc_bg_neg.txt'), quote = F, row.names = F, col.names = F)
 pos_GO_union = do_GO(bg_pos, background = uni_bg, ont=ont)
 neg_GO_union = do_GO(bg_neg, background = uni_bg, ont=ont)
 pos_GO_union_pcs = pcs_GO_out(pos_GO_union, filename=file.path(sub_folder, 'GO_pos_union.pdf'), dir=plot_out, cneplt=F)
@@ -197,21 +209,31 @@ for (i in 1:length(test_cdts)){
   neg_spc = bg_neg[get_idx_condt(neg_um_tis,test_condition = test_cdts[[i]])]
   pos_GO = do_GO(pos_spc, background = bg_pos, ont=ont)
   neg_GO = do_GO(neg_spc, background = bg_neg, ont=ont)
-  pos_GO_pcs = pcs_GO_out(pos_GO, filename=file.path(sub_folder, paste('GO_', ont, '_pos_', file_prefix[i], '.pdf', sep='')), dir=plot_out, cneplt = F)
+  pos_GO_pcs = pcs_GO_out(pos_GO, filename=file.path(sub_folder, paste('GO_', ont, '_pos_', file_prefix[i], '.pdf', sep='')), dir=plot_out, cneplt = F, size = c(6,7))
   neg_GO_pcs = pcs_GO_out(neg_GO, filename=file.path(sub_folder, paste('GO_', ont, '_neg_', file_prefix[i], '.pdf', sep='')), dir=plot_out, cneplt = F)
   ern_df = rbind(ern_df, c(pos_GO_pcs$n_sig_term, neg_GO_pcs$n_sig_term, length(pos_spc), length(neg_spc)))
 }
 colnames(ern_df) = c('Pos_GO', 'Neg_GO', 'Pos_gene', 'Neg_gene')
-ern_df$experiment = file_prefix
+ern_df = as.data.frame(ern_df)
+ern_df$experiment[1:4] = file_prefix
 ern_df = rbind(ern_df, c(pos_GO_union_pcs$n_sig_term, neg_GO_union_pcs$n_sig_term, length(bg_pos), length(bg_neg), 'Union'))
-
-write.table(ern_df,file.path(plot_out, sub_folder, 'summary_enrichment.txt'), sep='\t', quote = F, row.names = F)
+write.table(ern_df,file.path(plot_out, sub_folder, paste(ont, 'summary_enrichment.txt', sep='_')), sep='\t', quote = F, row.names = F)
 
 # Further analysis in breast cancer ==========
 ## Plot upset ====
 upset(pos_um_tis, intersect = colnames(pos_um_tis),
       min_degree = 1, mode='exclusive_intersection')
 
+## KEGG with positive and negative together ====
+posConSpc = rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(F,T,F))]
+negConSpc = rownames(neg_um_tis)[get_idx_condt(neg_um_tis, c(F,T,F))]
+to_gsea = tissue_qtl[tissue_qtl$gene %in% c(posConSpc, negConSpc),]            
+test = do_GSEA(to_gsea, rank_nm = 'beta', gene_nm = 'gene', pvalue = 1)
+test@result[test@result$pvalue<0.05 & test@result$qvalues<0.25,]
+enrichplot::gseaplot2(test,1)
+posConSpc = tissue_qtl[tissue_qtl$gene %in% posConSpc,]
+
+## Analyse controls ====
 pos_um_tis_ctr = load_controls(um_to_merge = pos_um_tis, ng_ctrs = T)
 ### where are the controls
 pgs = pos_um_tis_ctr[,c("conformation","contact","sandwich", "pg")]
@@ -224,28 +246,91 @@ upset(ngs, intersect = colnames(ngs),
       mode = 'exclusive_intersection')
 colSums(ngs)
 
+dt.tcga = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData', 
+                          ann_bin_mut_list = mut_groups, mode='tcga')
+meta = as.data.frame(dt.tcga[[1]])
+maf_sw = subsetMaf(dt.tcga[[2]], 
+          tsb=rownames(meta)[meta$has_sandwich==1&meta$p53_state=='missense'], 
+          genes = 'TP53')@data
+table(maf_sw$Protein_position)
 
-colnames(pos_um_tis_ctr)
-pos_um_tis_ctr = pos_um_tis_ctr[get_idx_condt(pos_um_tis_ctr, c(NA,NA,NA,F,F,NA,NA,NA,NA,F,T,F)),]
-test = pos_um_tis_ctr[pos_um_tis_ctr$pg==1,]
-
+# Contact specific
 colnames(pos_um_tis)
-test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(F,T,F))], background = bg_pos)
-dotplot(test)
-## pick adhesion and migration related terms
-gene_in_GO = ext_gene_GO(test@result$geneID[c(3,4,6,7)], do_intersect = F)
+mf_test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(F,T,F))], 
+                background = bg_pos, ont='MF')
+pcs_mf = pcs_GO_out(mf_test, cneplt = F, dir=plot_out, filename='GO_MF_pos_Contact.pdf')
+rvg = run_revigo(pcs_mf[[2]][,c('ID', 'pvalue')])
+cnetplot(mf_test, showCategory = rvg$Name[rvg$Uniqueness==1])
+
+bp_test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(F,T,F))], 
+             background = bg_pos, ont='BP')
+pcs_bp = pcs_GO_out(bp_test, cneplt = F, dir=plot_out, filename='GO_BP_pos_Contact.pdf')
+rvg = run_revigo(pcs_bp[[2]][,c('ID', 'pvalue')])
+cnetplot(bp_test, showCategory = rvg$Name[rvg$Uniqueness==1])
+
+# core intersection, for cell division genes
+bp_test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(T,T,T))], 
+                background = bg_pos, ont='BP')
+
+## pick adhesion and migration related terms in BP
+dotplot(bp_test)
+goplot(bp_test)
+# https://www.jianshu.com/p/e0d6e3210c25
+edo = pairwise_termsim(bp_test)
+emapplot(edo, cex_category=1, showCategory=10, 
+         repel=T, nCluster=2, node_label='category', label_format=30)
+
+# cell division terms
+gene_in_GO = ext_gene_GO(bp_test@result$geneID[1:5], do_intersect = F)
+# neural terms
+gene_in_GO = ext_gene_GO(bp_test@result$geneID[c(2,5)], do_intersect = F)
+nev = gene_in_GO
+# adhesion and migraiton terms # previous: 3,4,6,7
+gene_in_GO = ext_gene_GO(bp_test@result$geneID[c(3,4,6,7)], do_intersect = F)
+mig = gene_in_GO
+
+g = ggvenn::ggvenn(list('Neural'=nev, 'Adhesion'=mig), stroke_color = 'white', text_size = 6, set_name_size = 8, auto_scale = F) +
+  scale_fill_manual(values=c('#FF9896FF', '#17BECFFF'))
+ggsave(file.path(plot_out,'BRCA', 'overlap_nev_mig.pdf'),
+       plot = g, width=7, height=5, units='in', device='pdf', dpi=300, bg = 'transparent')
+
 pos_um_tis_mig = pos_um_tis_ctr[rownames(pos_um_tis_ctr) %in% gene_in_GO,]
 colnames(pos_um_tis_mig)
 mig_gene_eqtl = df_coll[df_coll$gene %in% gene_in_GO & df_coll$experiment=='tcga_brca_raw_seq',]
 mig_gene_eqtl = cbind(mig_gene_eqtl[,1:7], pos_um_tis_mig[mig_gene_eqtl$gene,])
-write.table(mig_gene_eqtl, file.path(data_out, 'BRCA_migration_qtl.txt'), sep='\t', quote = F, row.names = F)
+write.table(mig_gene_eqtl, file.path(data_out, 'BRCA_neural_qtl.txt'), sep='\t', quote = F, row.names = F)
+## pick GTPase related terms in MF
+dotplot(mf_test)
+gtp_gene = ext_gene_GO(mf_test@result$geneID[c(3,6,7)], do_intersect = F)
+
+pos_um_tis_gtp = pos_um_tis_ctr[rownames(pos_um_tis_ctr) %in% gtp_gene,]
+gtp_gene_eqtl = df_coll[df_coll$gene %in% gtp_gene & df_coll$experiment=='tcga_brca_raw_seq',]
+gtp_gene_eqtl = cbind(gtp_gene_eqtl[,1:7], pos_um_tis_gtp[gtp_gene_eqtl$gene,])
+write.table(gtp_gene_eqtl, file.path(data_out, 'BRCA_GTPase_qtl.txt'), sep='\t', quote = F, row.names = F)
+
+GOI = intersect(gtp_gene_eqtl$gene, mig_gene_eqtl$gene)
+GOI = c("KALRN","NGEF","RGS2","SYDE1","ARHGEF2","CYTH1",
+        "TBXA2R","MCF2","RAPGEF1")
+vis = gtp_gene_eqtl[gtp_gene_eqtl$gene %in% GOI,]
+
+## there is an enrichment of arhgef family??
+contact_spc = pos_um_tis_ctr[get_idx_condt(pos_um_tis_ctr, c('conformation'=F,'contact'=T, 'sandwich'=F)),]
+contact_spc_qtl = df_coll[df_coll$gene %in% rownames(contact_spc) & 
+                          df_coll$experiment=='tcga_brca_raw_seq' & 
+                          df_coll$protein_change=='contact',]
+write.table(contact_spc_qtl$gene[1:100], file.path(data_out, 'brca_contact_spc_top100.txt'),
+            quote = F, row.names = F, col.names = F)
+
 # overlap with R273H peaks
+GOI = gene_in_GO
 GOI = rownames(pos_um_tis_mig)[pos_um_tis_mig$peak.over.chek1==1]
 
 brca.gene = read.table(file.path(eqtl_out, 'tcga_brca_raw_seq', 'trans_eqtl_fdr005.txt'), header = T)
 brca.gene = subset(brca.gene, brca.gene$beta > 0 & brca.gene$protein_change %in% 
                      c('contact', 'conformation', 'sandwich'))
 brca.gene[brca.gene$gene %in% GOI,]
+test_gsea = do_GSEA(brca.gene[brca.gene$gene %in% GOI,], 
+               gene_nm = 'gene', rank_nm = 'beta', pvalue = 1)
 
 colnames(pos_um_tis)
 contact_pos_genes = bg_pos[get_idx_condt(pos_um_tis,
@@ -257,8 +342,6 @@ sandwich_neg_GO = do_GO(sandwich_neg_genes, background = bg_neg, ont='BP')
 
 ## Profile migraiton gene signature ====
 mut_groups = c('contact', 'conformation', 'sandwich')
-dt.tcga = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData', 
-                          ann_bin_mut_list = mut_groups, mode='tcga')
 dt.ccle = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData',
                           ann_bin_mut_list = mut_groups, mode = 'ccle')
 df.tcga = cbind(t(assay(dt.tcga[[1]][GOI,,'RNA'])), as.data.frame(dt.tcga[[1]]@colData[,c('p53_state', 'has_contact', 'has_conformation', 'has_sandwich')]))
@@ -301,7 +384,7 @@ g = ggplot(df.plt) +
 ggsave(file.path(plot_out,'BRCA', 'HeatmapTCGA.pdf'),
        plot = g + theme(legend.key.width = unit(0.4,units = 'inch')),
        width=8.27*2, height=6, units='in', device='pdf', dpi=300, bg = 'transparent')
-ggsave(file.path(plot_out,'BRCA', 'WntHeatmapCCLE.pdf'),
+ggsave(file.path(plot_out,'BRCA', 'HeatmapCCLE.pdf'),
        plot = g + theme(legend.key.width = unit(0.3,units = 'inch')),
        width=8.27*0.6, height=4, units='in', device='pdf', dpi=300, bg = 'transparent')
 

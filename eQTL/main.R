@@ -17,16 +17,19 @@ config_name = 'tcga_pan_nine.yaml'  # tcga_luad.yaml, tcga_brca.yaml, metabric.y
 default_cfg_name = 'default_vsWT.yaml'
 load('/Users/jefft/Desktop/p53_project/datasets/UMD_TP53/SIFT_UMD.RData')
 
+config_name = 'tcga_xena_brca.yaml'
+
 # BATCH RUN
 config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.yaml',
                  'tcga_stad.yaml', 'tcga_luad.yaml', 'tcga_brca.yaml', 'tcga_coad.yaml',
                  'tcga_hnsc.yaml')
 
 for (config_name in config_names) {
+  print(config_name)
   refresh_log = TRUE
   save_intermediate = FALSE  # may spend extra time
-  use_cache = TRUE
-  use_cache_geno_pca = TRUE
+  use_cache = TRUE # cached data (clean_data.RData)
+  use_cache_geno_pca = TRUE # cached genotype PCs
   source = TRUE
   
   ## Handle config

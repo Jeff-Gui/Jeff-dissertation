@@ -45,6 +45,16 @@ dotplot(test)
 goi = ext_gene_GO(test@result$geneID[c(3,4,6,7)])
 goi = rownames(coad_pos)[1:40]
 
+mig = read.table(file.path(data_out, 'BRCA_migration_qtl.txt'), sep='\t', header = T)
+# merge with comparison to the WT
+gtex_qtl = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/test/outputs/tcga_gtex_brca/trans_eqtl_fdr005.txt', header = T)
+gtex_qtl = gtex_qtl[gtex_qtl$protein_change=='all',]
+rownames(gtex_qtl) = gtex_qtl$gene
+mig$beta_toil = gtex_qtl[mig$gene, 'beta']
+
+goi = unique(mig$gene) # nodes
+gene_features = mig[mig$protein_change=='contact',] # node features
+
 # STRINGdb ====
 library(STRINGdb)
 stringdb = STRINGdb$new(species=9606, score_threshold=400, version='11.5') # human = 9606
@@ -74,25 +84,47 @@ links_2 = links %>% mutate(from_c = dplyr::count(., from)$n[match(from, dplyr::c
   filter(!(from_c == 1 & to_c == 1)) %>%
   dplyr::select(1,2,3)
 
-nodes = links_2 %>% { data.frame(gene = c(.$from, .$to)) } %>% distinct()
-net = graph_from_data_frame(d=links_2,vertices=nodes,directed = F)
+plot_link = links # !!! choose which link set
+nodes = plot_link %>% { data.frame(gene = c(.$from, .$to)) } %>% distinct()
+net = graph_from_data_frame(d=plot_link,vertices=nodes,directed = F)
 mem = components(net)$membership
 net_ids = unique(components(net)$membership)  # there may be multiple connected nets
 
-for (i in net_ids){
-  sub_net = subgraph(net, names(mem[mem==i]))
-  V(sub_net)$deg = degree(sub_net)
-  V(sub_net)$size = degree(sub_net)/5
-  E(sub_net)$width = E(sub_net)$weight/10
-  ggraph(sub_net,layout = "centrality", cent = deg)+
-    geom_edge_fan(aes(edge_width=width), color = "lightblue", show.legend = F)+
-    geom_node_point(aes(size=size), color="orange", alpha=0.7)+
-    geom_node_text(aes(filter=deg>3, label=name), size = 3, repel = T)+
-    scale_edge_width(range = c(0.2,1))+
-    scale_size_continuous(range = c(1,10) )+
-    guides(size='none')+
-    theme_graph()
-}
+rownames(gene_features) = gene_features$gene
+i = 1 # network ID
+sub_net = subgraph(net, names(mem[mem==i]))
+V(sub_net)$deg = degree(sub_net)
+V(sub_net)$size = degree(sub_net)/5
+V(sub_net)$beta = gene_features[V(sub_net)$name,'beta']
+V(sub_net)$beta_toil = gene_features[V(sub_net)$name, 'beta_toil']
+V(sub_net)$bound = gene_features[V(sub_net)$name, 'peak.over.chek1']
+E(sub_net)$width = E(sub_net)$weight/10
+ggraph(sub_net,layout = "centrality", cent = deg)+
+  geom_edge_fan(aes(edge_width=width), color = "grey80", show.legend = F, alpha=0.7)+
+  geom_node_point(aes(size=beta, color=as.factor(bound)), alpha=0.7)+
+  scale_color_manual(values=c('grey70', '#FFBB78FF')) +
+  geom_node_text(aes(filter=bound==1, label=name), size = 4, repel = T)+
+  scale_edge_width(range = c(0.2,1))+
+  scale_size_continuous(range = c(1,10) )+
+  # guides(size='none')+
+  theme_graph()
+#g = ggraph(sub_net,layout = "centrality", cent = deg)+
+g = ggraph(sub_net,layout = "stress")+
+  geom_edge_fan(aes(edge_width=width), color = "grey80", show.legend = F, alpha=0.7)+
+  geom_node_point(aes(size=beta, color=beta_toil), alpha=0.7)+
+  scale_color_gradientn(colors=colorRampPalette(c('#1F77B4FF','white','#D62728FF'))(100),
+                        name = 'eQTL beta\n(TCGA VS GTEX)', na.value = 'grey80') +
+  geom_node_text(aes(filter=bound==1, label=name), size = 3.5, repel = F,
+                 nudge_x = 0, nudge_y = 0)+
+  scale_edge_width(range = c(0.2,1))+
+  scale_size_continuous(range = c(1,10), name='eQTL beta\n(p53 contact VS\np53 WT TCGA)')+
+  # guides(size='none')+
+  theme_graph() +
+  theme(text = element_text(family="sans"), legend.position = 'left')
+ggsave(file.path(plot_out,'BRCA', 'network.pdf'),
+       plot = g, width=11.67*0.7, height=8.27*0.7, units='in', device='pdf', dpi=300, bg = 'transparent')
+
+
 
 # ggraph(net,layout = "linear", circular = TRUE)+
 #   geom_edge_arc(aes(edge_width=width), color = "lightblue", show.legend = F)+

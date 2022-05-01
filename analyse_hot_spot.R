@@ -34,24 +34,6 @@ df_coll[['cancer']] = sapply(df_coll$experiment, function(x){
 })
 df_coll$cancer = toupper(df_coll$cancer)
 
-# Load GO ========
-load(file.path(dir_home, 'GO_result_no_BG_filter.RData'))
-go_df = data.frame()
-for (i in 1:length(go_coll)){
-  nm = names(go_coll)[i]
-  sub_df = go_coll[[nm]]
-  sub_df[['experiment']] = nm
-  rownames(sub_df) = NULL
-  go_df = rbind(go_df, sub_df)
-}
-hist(go_df$Count, breaks=100)
-go_df['cancer'] = sapply(go_df$experiment, 
-                         function(x){toupper(strsplit(x, split = '_')[[1]][2])})
-go_df['sign'] = 'neg'
-go_df[grep('pos', go_df$experiment), 'sign'] = 'pos'
-go_df['mutation'] = sapply(go_df$experiment,
-                           function(x){strsplit(x, split='-')[[1]][2]})
-
 # Overlapping gene ========
 ## load control genes ====
 library(readxl)
@@ -94,7 +76,8 @@ for (i in 1:nrow(hs_smm)){
     hs_smm$mutant_size[i] = ssize[ssize$Cancer==hs_smm$cancer[i],'Mutant']
   }
 }
-g = ggplot(hs_smm %>% gather(key='sign', value='Count', 2:3),
+g = ggplot(hs_smm[!hs_smm$cancer %in% c('LUSC', 'LUAD', 'OV'),] %>% 
+             gather(key='sign', value='Count', 2:3),
            aes(x=cancer,y=Count/mutant_size)) +
   geom_bar(aes(fill=sign),stat='identity', position = 'dodge') +
   scale_y_continuous(expand = expansion(mult = c(0,0.2))) +
@@ -104,7 +87,7 @@ g = ggplot(hs_smm %>% gather(key='sign', value='Count', 2:3),
   # geom_text(label=parse(text="'Not passing\nVAF filter'"), x='LUAD', y=2, size=2.5) +
   mytme + theme(legend.position = c(0.8,0.9))
 ggsave(file.path(plot_out, 'panCan_count_overview.pdf'),
-       plot=g, height=11.69*0.4,width=8.27*0.9,units='in',device='pdf',dpi=300)
+       plot=g, height=11.69*0.4,width=8.27*0.7,units='in',device='pdf',dpi=300)
 
 # Identify common signature across cancers
 coll_pos_hs = list()
@@ -356,7 +339,7 @@ ggsave(file.path(plot_out, 'panCan_neg_trh.pdf'),
 deg_trh = 3
 tar = rownames(upset_mtx_pan[rowSums(upset_mtx_pan) >= deg_trh,])
 # !!! change sign of the background !!!
-test = do_GO(tar, background = hs$gene[which(hs$beta>0)]) # tar: 234 genes degree 3, 74 genes degree 4
+test = do_GO(tar, background = unique(hs$gene[which(hs$beta>0)])) # tar: 234 genes degree 3, 74 genes degree 4
 ps = pcs_GO_out(test, filename = 'panCan_pos_trh3_GO.pdf', dir = plot_out, cneplt = F,
                 size = c(8.27*0.7,11.69*0.5)) # width, height
 test_rvg = run_revigo(test)
@@ -368,7 +351,7 @@ repair_ctr = repair_ctr[repair_genes,]
 mean_beta = hs[hs$gene %in% tar,] %>% 
   group_by(gene) %>% summarise(mbeta=mean(beta))
 
-test = do_GO(tar, background = hs$gene[which(hs$beta<0)]) # tar: 146 genes, 49 genes degree 4
+test = do_GO(tar, background = unique(hs$gene[which(hs$beta<0)])) # tar: 146 genes, 49 genes degree 4
 ps = pcs_GO_out(test, filename = 'panCan_neg_trh3_GO.pdf', dir = plot_out, cneplt = F,
                 size = c(8.27*0.7,11.69*0.5)) # p53 markers
 
@@ -457,7 +440,7 @@ gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,NA,NA,NA,NA,T))] #
 test = do_GO(gene, background = bg, ont='BP')
 g = dotplot(test) + labs(title= 'TCGA RNA up X CCLE RNA up') # nothing
 # TCGA RNA and CCLE RNA NS
-gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,NA,T,NA,NA,NA,T))] # 192 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(NA,NA,T,NA,NA,NA,T))] # 177 genes
 test = do_GO(gene, background = bg, ont='BP')
 sign3 = ext_gene_GO(test@result$geneID[1:5], do_intersect = F)
 g = dotplot(test) + labs(title= 'TCGA RNA up X CCLE RNA NS up')
@@ -475,11 +458,11 @@ g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X ChIP-seq peaks X CCLE RN
 ggsave(file.path(plot_out,'BRCA', '5_chip-tcga-CCLE_GO.pdf'),
        width=6, height=4, units='in', device='pdf', dpi=300, plot = g)
 # TCGA and CCLE RNA and CCLE RNA ns
-gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,NA,NA,T))] # 100 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,NA,NA,T))] # 91 genes
 test = do_GO(gene, background = bg, ont='BP') # nothing
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X CCLE RNA up X CCLE NS RNA up', width = 28))
 # ChIP and TCGA, CCLE RNA, CCLE RNA NS
-gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,T,NA,T))] # 21 genes
+gene = rownames(um)[get_idx_condt(um, test_condition = c(T,NA,T,NA,T,NA,T))] # 26 genes
 test = do_GO(gene, background = bg, ont='BP') # nothing
 g = dotplot(test) + labs(title= str_wrap('TCGA RNA up X ChIP-seq peaks X CCLE RNA up X CCLE RNA NS up', width=28))
 

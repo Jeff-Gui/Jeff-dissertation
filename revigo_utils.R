@@ -7,6 +7,7 @@ run_revigo = function(GO_pvalue_df, measure='SIMREL', cutoff='0.7'){
   # input: GO dataframe with at least two columns: GO term ID, pvalue (no need to be padjust)
   ustring = c()
   for (i in 1:nrow(GO_pvalue_df)){
+    #ustring = c(ustring, GO_pvalue_df[i,1])
     ustring = c(ustring, paste(GO_pvalue_df[i,1], GO_pvalue_df[i,2], sep=' '))
   }
   userData = paste(ustring, collapse = '\n')
@@ -25,7 +26,8 @@ run_revigo = function(GO_pvalue_df, measure='SIMREL', cutoff='0.7'){
   ) -> res
   
   dat = content(res, encoding = "UTF-8")
-  a = html_table(dat)[[1]]
+  tblist = html_table(dat)
+  a = Reduce(rbind, tblist)
   print(paste('Remaining GO terms:',sum(a$Eliminated=='False'),'/', nrow(a)))
   a = a[a$Eliminated=='False',]
   # the value column is log10(pvalue)

@@ -68,12 +68,12 @@ save_GO = function(ego, filename, dir, cneplt=TRUE,size=NULL){
       width = size[1]
       height = size[2]
     }
-    marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
+    marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list), top='') %>% 
       ggsave(file.path(dir, filename),
              plot=., width=width,height=height,units='in',device='pdf',dpi=300)
   }, error = function(e){
     plt.list = list(dotplot(ego))
-    marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list)) %>% 
+    marrangeGrob(grobs=plt.list,ncol=1,nrow=length(plt.list), top = '') %>% 
       ggsave(file.path(dir, filename),
              plot=., width=width,height=height,units='in',device='pdf',dpi=300)
   })

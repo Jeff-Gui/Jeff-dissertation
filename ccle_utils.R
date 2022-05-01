@@ -5,7 +5,7 @@ library(maftools)
 source('/Users/jefft/Desktop/p53_project/scripts/eQTL/utils.R')
 
 load_rnai = function(rnai_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/extra_raw/RNAi_D2_combined_gene_dep_scores.csv',
-                     hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv',
+                     hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv',
                      protein_coding_only = TRUE){
   tb = fread(rnai_fp, sep=',', header = T, na.strings = 'NA', quote = '\"')
   tb = as.data.frame(tb)
@@ -57,7 +57,7 @@ load_protein_z_score = function(protein_fp='/Users/jefft/Desktop/p53_project/dat
 
 
 load_crispr_score = function(fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/raw/CRISPR_gene_effect.txt',
-                            hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv',
+                            hg19_ann = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv',
                             sample_meta = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/raw/sample_info.txt',
                             protein_coding_only=TRUE){
   tb = fread(fp, sep=',', header = T, na.strings = 'NA', quote = '\"')
@@ -170,9 +170,13 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
     
     col_to_use = c('gene_expr', 'p53_state', 'gene_rnai',
                    paste('mutation_binary_state', 1:length(mutation_groups), sep='.'))
-    df_plt = rbind(as.data.frame(ccle[[1]]@colData[idx,col_to_use]) %>%
-                     mutate(db='ccle'),as.data.frame(tcga[[1]]@colData[,col_to_use]) %>%
-                     mutate(db='tcga'))
+    if (no_ccle){
+      df_plt = as.data.frame(tcga[[1]]@colData[,col_to_use]) %>% mutate(db='tcga')
+    } else {
+      df_plt = rbind(as.data.frame(ccle[[1]]@colData[idx,col_to_use]) %>%
+                       mutate(db='ccle'),as.data.frame(tcga[[1]]@colData[,col_to_use]) %>%
+                       mutate(db='tcga'))
+    }
     df_plt['itg_state'] = NA
     for (i in 1:length(mutation_groups)){
       df_plt[which(df_plt[[paste('mutation_binary_state', i, sep='.')]]==1),'itg_state'] = names(mutation_groups)[i]
@@ -207,8 +211,9 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
         geom_violin() +
         geom_boxplot(width=0.3, outlier.shape = NA) +
         geom_jitter(width=0.1, alpha=0.5, size=0.5) +
-        mytme +
-        labs(x='p53 state', y=paste(gene, 'expression')) +
+        mytme + 
+        labs(y=gene, x='') +
+        # labs(x='p53 state', y=paste(gene, 'expression')) +
         theme(strip.background = element_rect(fill='transparent'),
               strip.text = element_text(size=12, face='bold'),
               axis.text.x = element_text(angle=45, hjust = 1))

@@ -57,6 +57,7 @@ dotplot(test)
 pcs_GO_out(test, dir = plot_out, filename = 'R175H_BRCA-COAD_neg_co_gene_GO_BP.pdf')
 
 # Cancer specific signature
+check = rownames(um)[get_idx_condt(um, c(T,T))]
 ont = 'BP'
 coll = list()
 go_list = list()

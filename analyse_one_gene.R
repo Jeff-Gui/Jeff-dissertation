@@ -84,7 +84,7 @@ genes = genes$gene
 
 mycomp = list('rna'=list(c('Contact', 'Wildtype'),
                          c('Contact', 'Conformation'),
-                         c('Contact', 'Nonsense'),
+                         #c('Contact', 'Nonsense'),
                          c('Contact', 'Sandwich')),
               'rnai'=list(c('Contact', 'Wildtype')))
 mycomp = list('rna'=list(c('Hotspots', 'Wildtype')),
@@ -94,7 +94,8 @@ names(table(ccle[[1]]@colData$PRIMARY_SITE))
 plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
                     primary_site = 'Breast', rnai = rnai,
                     comparison = mycomp,
-                    flt_other = T
+                    flt_other = T, 
+                    plot_nonsense = F, no_ccle = T,
                     )
 plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
                      layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
@@ -104,8 +105,8 @@ plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
 
 plt$plots %>% marrangeGrob(ncol=2, nrow=3, top = '',
                            layout_matrix = matrix(1:6,byrow = T, ncol=2)) %>%
-  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/coreVScontact/BRCA/inconsGenes.pdf',
-         plot=., width=12,height=16,units='in',device='pdf',dpi=300)
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/coreVScontact/BRCA/contactTop5Genes.pdf',
+         plot=., width=8,height=13,units='in',device='pdf',dpi=300)
 
 
 # Control genes conflicting to the literature ====

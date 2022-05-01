@@ -37,10 +37,12 @@ generate_gene_table = function(gtf_path, output_path, type_col='source', protein
   smm_ftd['source'] = sc_lookup[smm_ftd$gene_name]
   smm_ftd = smm_ftd[,which(colnames(smm_ftd) %in% c('gene_name', 'tp_start', 'tp_end', 'source'))]
   smm_ftd['chr'] = seq_lookup[smm_ftd$gene_name]
-  # only autosome
+  # not only autosome
   if (length(grep('chr', smm_ftd$chr))==0){
-    smm_ftd = subset(smm_ftd, smm_ftd$chr %in% 1:22)
+    # smm_ftd = subset(smm_ftd, smm_ftd$chr %in% 1:22)
     smm_ftd$chr = paste('chr', smm_ftd$chr, sep='')
+  } else {
+    # smm_ftd = subset(smm_ftd, smm_ftd$chr %in% paste('chr',1:22,sep=''))
   }
   if (protein_coding_only){
     smm_ftd = smm_ftd[,c(1,5,2,3)]
@@ -55,16 +57,16 @@ generate_gene_table = function(gtf_path, output_path, type_col='source', protein
 
 # hg18
 generate_gene_table(gtf_path = '/Users/jefft/Genome/NCBI36_annotation/Homo_sapiens.NCBI36.52.gtf.gz',
-                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg18_gene_table_autosome.tsv',
+                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg18_gene_table.tsv',
                     type_col = 'source', protein_coding_only = T)
 
 # hg19 (GRCh37)
 generate_gene_table(gtf_path = '/Users/jefft/Genome/GRCh37_annotation/gencode.v19.annotation.gtf.gz',
-                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table_autosome.tsv',
+                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv',
                     type_col = 'transcript_type', protein_coding_only = T)
 
 # hg38 (GRCh38)
 generate_gene_table(gtf_path = '/Users/jefft/Genome/GRCh38_annotation/Homo_sapiens.GRCh38.99.gtf',
-                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg38_gene_table_autosome.tsv',
+                    output_path = '/Users/jefft/Desktop/p53_project/scripts/eQTL/hg38_gene_table.tsv',
                     type_col = 'transcript_biotype', protein_coding_only = T)
 

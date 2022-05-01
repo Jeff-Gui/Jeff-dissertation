@@ -29,10 +29,20 @@ smm = full_join(coll %>% group_by(cancer) %>% summarise(count_pos=sum(beta>0), c
           coll_ploid %>% group_by(cancer) %>% summarise(count_pos=sum(beta>0), count_neg=sum(beta<0)),
           by='cancer', suffix = c('.pldin','.pldout'))
 smm[is.na(smm)] = 0
-ggplot(gather(smm, key='group',value='count',2:ncol(smm))) +
+smm_plt = smm[smm$cancer!='LUSC',]
+g = ggplot(gather(smm_plt, key='group',value='count',2:ncol(smm))) +
   geom_bar(aes(x=group,y=count), stat = 'identity') +
   facet_wrap(~cancer, scale='free_y') + mytme +
-  theme(axis.text.x = element_text(angle=90))
+  scale_fill_d3(palette = 'category20') +
+  scale_y_continuous(expand = c(0,0)) +
+  theme(axis.text.x = element_text(angle=45, hjust = 1, vjust = 1),
+        strip.background = element_rect(fill='transparent'),
+        strip.text.x = element_text(face='bold', size=11)) +
+  labs(x='',y='Gene count') +
+  scale_x_discrete(labels=c('Negative', 'Negative (- ploidy)',
+                            'Positive', 'Positive (- ploidy)'))
+ggsave(file.path(plot_out, 'compare_ploid_count.pdf'),
+       plot=g, width=11.69*0.5, height=8.27*0.5,units='in',device='pdf',dpi=300)
 
 for (j in 1:nrow(smm)){
   print(smm$cancer[j])
@@ -130,39 +140,45 @@ ggsave(file.path(plot_out, 'missing_gene.pdf'),
 check_cancer = 'COAD'
 coad_join = joinTb[joinTb$cancer==check_cancer,]
 test = coad_join[coad_join$missing,]
+## choose one !!!
 test = test[order(test$beta.pldin, decreasing = T),]
 test = test[order(test$beta.pldout, decreasing = T),]
 ## load data
 coad = load_clean_data('/Users/jefft/Desktop/p53_project/datasets/4-COAD-TCGA/clean_data.RData',
                        ann_p53 = T, ann_bin_mut_list = c('hot_spot'))
 
+## choose one !!!
 goi = test$gene[nrow(test)] # negative interacttion
 goi = test$gene[1] # positive interaction
 
-plt_dt = cbind(as.data.frame(coad[[1]]@colData), 
-               t(assay(coad[[1]][goi,,'RNA']))) # pick the first gene
-plt_dt = plt_dt[plt_dt$p53_state %in% c('missense', 'Wildtype'),]
-ggplot(plt_dt, aes(x=has_hot_spot,y=get(goi),color=ANEUPLOIDY_SCORE)) +
-  geom_jitter(aes(group=has_hot_spot)) +
-  labs(y=goi) +
-  mytme + scale_color_gradientn(colours=colorRampPalette(c('red','blue'))(100))
+for (goi in c('RAB26','NDN','TMEM170B','WWC1')){
+  plt_dt = cbind(as.data.frame(coad[[1]]@colData), 
+                 t(assay(coad[[1]][goi,,'RNA']))) # pick the first gene
+  plt_dt = plt_dt[plt_dt$p53_state %in% c('missense', 'Wildtype'),]
+  ggplot(plt_dt, aes(x=has_hot_spot,y=get(goi),color=ANEUPLOIDY_SCORE)) +
+    geom_jitter(aes(group=has_hot_spot)) +
+    labs(y=goi) +
+    mytme + scale_color_gradientn(colours=colorRampPalette(c('red','blue'))(100))
   
-g = ggplot(plt_dt, aes(x=ANEUPLOIDY_SCORE,y=get(goi),color=as.factor(has_hot_spot),group=has_hot_spot)) +
-  geom_jitter() + geom_smooth(method = 'lm') +
-  labs(y=goi) +
-  facet_wrap(~has_hot_spot, nrow=2) +
-  scale_color_d3(palette = 'category20') +
-  mytme +
-  stat_cor()
-ggsave(file.path(plot_out, 'gene_pos_interact_pldout.pdf'),
-       plot=g, height=11.69*0.4, width=8.27*0.6,units='in',device='pdf',dpi=300)
+  g = ggplot(plt_dt, aes(x=ANEUPLOIDY_SCORE,y=get(goi),color=as.factor(has_hot_spot),group=has_hot_spot)) +
+    geom_jitter() + geom_smooth(method = 'lm') +
+    labs(y=goi) +
+    facet_wrap(~has_hot_spot, nrow=2) +
+    scale_color_d3(palette = 'category20') +
+    mytme +
+    stat_cor()
+  ggsave(file.path(plot_out, paste(goi, '_interact.pdf', sep='')),
+         plot=g, height=11.69*0.4, width=8.27*0.6,units='in',device='pdf',dpi=300)
+}
 
 g = ggplot(joinTb[joinTb$gene %in% c('RAB26','NDN','TMEM170B','WWC1') & joinTb$cancer=='COAD',], 
            aes(x=beta.pldin, y=beta.pldout)) +
   geom_point(size=5, color='coral',alpha=0.5) + mytme +
   geom_text(aes(label=gene), nudge_x = 0.1,nudge_y=0.1) +
   labs(x='Beta not considering aneuploidy', y='Beta aneuploidy as a covariate')
-g
+ggsave(file.path(plot_out, 'exp_gene_loc.pdf'),
+       plot=g, height=11.69*0.4, width=8.27*0.6,units='in',device='pdf',dpi=300)
+
 
 ## genome wide test ====
 cor_dt = cbind(as.data.frame(coad[[1]]@colData)[,c('ANEUPLOIDY_SCORE','p53_state', 'has_hot_spot')], t(assay(coad[[1]][,,'RNA'])))
