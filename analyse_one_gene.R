@@ -18,23 +18,29 @@ gene = 'SNAI1'
 primary_site = NULL
 # Central_Nervous_System, Breast, Large intestine
 primary_site = c('Breast') # set to NULL if do Pan
+mut_contact = c(273,248,119,120,241,276,280)
+
 mut_contact = c(273,248)
 mut_conform = c(175,282,249,245)
-mut_contact = c(273,248,119,120,241,276,280)
+mutation_groups = list(mut_conform, mut_contact)
+names(mutation_groups) = c('HS_conform', 'HS_contact')
+
 source = FALSE
 source = TRUE # set to TRUE if no loading
+
+mut = unique(meta_mut[meta_mut$meta_mut_id=='hot_spot','aa_pos'])
+mutation_groups = list(mut)
+names(mutation_groups) = c('Hotspots')
 
 mut = c(273,248,245,282,175,249)
 mutation_groups = list(mut)
 names(mutation_groups) = c('Hotspots')
 
-mutation_groups = list(mut_conform, mut_contact)
-names(mutation_groups) = c('HS_conform', 'HS_contact')
-
 mutation_groups = list(meta_mut$aa_pos[which(meta_mut$meta_mut_id=='conformation')],
                        meta_mut$aa_pos[which(meta_mut$meta_mut_id=='contact')],
                        meta_mut$aa_pos[which(meta_mut$meta_mut_id=='sandwich')])
 names(mutation_groups) = c('Conformation', 'Contact', 'Sandwich')
+
 for (i in 1:length(mutation_groups)){
   mutation_groups[[i]] = unique(mutation_groups[[i]])
 }
@@ -91,6 +97,26 @@ mycomp = list('rna'=list(c('Hotspots', 'Wildtype')),
               'rnai' = list(c('Hotspots', 'Wildtype')))
 names(table(ccle[[1]]@colData$PRIMARY_SITE))
 
+## hotspot ====
+genes = c('ARHGEF2', 'CDC20', 'BYSL')
+mycomp = list('rna'=list(c('Hotspots', 'Wildtype'),
+                         c('Hotspots', 'Nonsense')))
+plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
+                    primary_site = 'Breast', rnai = NULL,
+                    comparison = mycomp, no_rnai = T,
+                    flt_other = T, plot_ccle_nonsense = T,
+                    plot_nonsense = T, no_ccle = F, no_anova = T
+)
+plt$plots %>% marrangeGrob(ncol=3, nrow=2, top = '') %>%
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/GOI.pdf',
+         plot=., width=16,height=8,units='in',device='pdf',dpi=300)
+cle = plt$data$BYSL$sample
+cle = cle[cle$db=='CCLE',]
+mod = aov(gene_expr~itg_state, cle)
+summary(mod)
+TukeyHSD(mod)
+
+## Structural ====
 plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
                     primary_site = 'Breast', rnai = rnai,
                     comparison = mycomp,

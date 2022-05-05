@@ -1,6 +1,6 @@
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 # TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_CNA'
 ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'coreVScontact')
@@ -107,7 +107,7 @@ for (i in names(coll)){
 df_coll = subset(df_coll, df_coll$protein_change %in% c('contact', 'conformation', 'sandwich'))
 
 ## Overlap overview in cancers ====
-sign = 'neg'
+sign = 'pos'
 plt.list = list()
 hs_mtx_coll = list()
 cancer_OI = c('BRCA','COAD', 'LGG', 'STAD')
@@ -246,9 +246,11 @@ upset(ngs, intersect = colnames(ngs),
       mode = 'exclusive_intersection')
 colSums(ngs)
 
+mut_groups = c('contact', 'conformation', 'sandwich')
 dt.tcga = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData', 
-                          ann_bin_mut_list = mut_groups, mode='tcga')
-meta = as.data.frame(dt.tcga[[1]])
+                          ann_bin_mut_list = mut_groups, mode='tcga',
+                          check_cna_wt = T) # filter copy number - none
+meta = as.data.frame(dt.tcga[[1]]@colData)
 maf_sw = subsetMaf(dt.tcga[[2]], 
           tsb=rownames(meta)[meta$has_sandwich==1&meta$p53_state=='missense'], 
           genes = 'TP53')@data
@@ -269,7 +271,7 @@ rvg = run_revigo(pcs_bp[[2]][,c('ID', 'pvalue')])
 cnetplot(bp_test, showCategory = rvg$Name[rvg$Uniqueness==1])
 
 # core intersection, for cell division genes
-bp_test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(T,T,T))], 
+bp_test = do_GO(rownames(pos_um_tis)[get_idx_condt(pos_um_tis, c(F,T,F))], 
                 background = bg_pos, ont='BP')
 
 ## pick adhesion and migration related terms in BP
@@ -286,7 +288,9 @@ gene_in_GO = ext_gene_GO(bp_test@result$geneID[1:5], do_intersect = F)
 gene_in_GO = ext_gene_GO(bp_test@result$geneID[c(2,5)], do_intersect = F)
 nev = gene_in_GO
 # adhesion and migraiton terms # previous: 3,4,6,7
-gene_in_GO = ext_gene_GO(bp_test@result$geneID[c(3,4,6,7)], do_intersect = F)
+term_id = c(1,2,4:10)
+term_id = c(3,4,6,7)
+gene_in_GO = ext_gene_GO(bp_test@result$geneID[term_id], do_intersect = F)
 mig = gene_in_GO
 
 g = ggvenn::ggvenn(list('Neural'=nev, 'Adhesion'=mig), stroke_color = 'white', text_size = 6, set_name_size = 8, auto_scale = F) +
@@ -298,7 +302,7 @@ pos_um_tis_mig = pos_um_tis_ctr[rownames(pos_um_tis_ctr) %in% gene_in_GO,]
 colnames(pos_um_tis_mig)
 mig_gene_eqtl = df_coll[df_coll$gene %in% gene_in_GO & df_coll$experiment=='tcga_brca_raw_seq',]
 mig_gene_eqtl = cbind(mig_gene_eqtl[,1:7], pos_um_tis_mig[mig_gene_eqtl$gene,])
-write.table(mig_gene_eqtl, file.path(data_out, 'BRCA_neural_qtl.txt'), sep='\t', quote = F, row.names = F)
+write.table(mig_gene_eqtl, file.path(data_out, 'BRCA_mig_qtl.txt'), sep='\t', quote = F, row.names = F)
 ## pick GTPase related terms in MF
 dotplot(mf_test)
 gtp_gene = ext_gene_GO(mf_test@result$geneID[c(3,6,7)], do_intersect = F)
@@ -340,8 +344,8 @@ sandwich_neg_genes = bg_neg[get_idx_condt(neg_um_tis,
                             test_condition = c(F,T,F))]
 sandwich_neg_GO = do_GO(sandwich_neg_genes, background = bg_neg, ont='BP')
 
+
 ## Profile migraiton gene signature ====
-mut_groups = c('contact', 'conformation', 'sandwich')
 dt.ccle = load_clean_data(fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData',
                           ann_bin_mut_list = mut_groups, mode = 'ccle')
 df.tcga = cbind(t(assay(dt.tcga[[1]][GOI,,'RNA'])), as.data.frame(dt.tcga[[1]]@colData[,c('p53_state', 'has_contact', 'has_conformation', 'has_sandwich')]))

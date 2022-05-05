@@ -101,7 +101,6 @@ deg = data.frame('gene'=rownames(toil_sel), 'foldchange'=fc, 'pvalue'=ps, 'padj'
 write.table(deg, file.path(data_out, 'TCGA-BRCA_p53mut_VS_XenaToil_Breast_DEG.txt'), sep='\t', row.names=F, quote = F)
 
 ## DEG from eQTL (missense p53 TCGA VS breast normal GTEX) ====
-### Not a good idea !!!
 deg = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/test/outputs/tcga_gtex_brca/trans_eqtl_fdr005.txt', sep='\t', header = T)
 colnames(deg) = c('snps','gene','stat','pvalue','padj', 'foldchange','protein_change')
 deg = deg[deg$protein_change=='all',]
@@ -198,11 +197,11 @@ null_dis[is.na(null_dis)] = 0
 lb_gp = c('Union', 'Core','Core (cell cycle GO)', 'Non-core', 'Contact','Contact (neural GO)','Contact (adhesion GO)', 'Conformation', 'Sandwich')
 g = ggplot(null_dis %>% gather(key='cls', value='freq', 1:4) %>%
          mutate(gp=factor(gp, levels = rev(flv)))) +
-  geom_boxplot(aes(y=gp,x=100*as.numeric(freq)),alpha=1, outlier.shape = NA, width=0.5) +
+  geom_boxplot(aes(y=gp,x=100*as.numeric(freq)),alpha=1, width=0.5, outlier.size = 0.5) +
   geom_point(data = smm, aes(x=100*freq,y=gp), color='red', shape=15) +
   facet_wrap(~cls, scales = 'free_x', nrow=1,
-             labeller = labeller(cls=c('down'='Low in cancer','ND'='Not detected', 
-                                       'noSig'='No significance', 'up'='High in cancer'))) +
+             labeller = labeller(cls=c('down'='Low','ND'='Not detected', 
+                                       'noSig'='No significance', 'up'='High'))) +
   scale_y_discrete(labels=rev(lb_gp)) +
   scale_x_continuous(expand = c(0.1,0.1)) +
   labs(x='Frequency (%)', y='') +
@@ -223,14 +222,15 @@ ggsave(file.path(plot_out,'BRCA', 'compositionVSnormal_bootstrap_fromQTL.pdf'),
 g = ggplot(smm, 
        aes(x=gp, y=freq, fill=cls)) +
   geom_bar(stat = 'identity') + mytme +
-  scale_fill_d3(palette = 'category20', name='', labels=c('Down', 'Not detected', 'No significance', 'Up')) +
-  labs(x='', y='frequency') +
+  scale_fill_d3(palette = 'category20', name='', labels=c('Low', 'Not detected', 'No significance', 'High')) +
+  labs(x='', y='Frequency') +
   geom_hline(yintercept = 0.5, color='black', linetype='dotted', size=1) +
   scale_x_discrete(labels=lb_gp) +
   geom_text(data = data.frame('gp'=names(nsize),'size'=nsize), aes(x=gp,y=0.07,label=paste('n=',size,sep=''),fill=NA),
      size=3, color='white',fontface='italic') +
   scale_y_continuous(expand = c(0,0)) +
-  theme(legend.direction = 'horizontal', axis.text.x = element_text(angle=45, vjust = 1, hjust=1))
+  theme(legend.direction = 'horizontal', axis.text.x = element_text(angle=45, vjust = 1, hjust=1),
+        legend.position = 'top')
 ggsave(file.path(plot_out,'BRCA', 'compositionVSnormal_fromQTL.pdf'),
        plot = g, width=8.27*0.8, height=5, units='in', device='pdf', dpi=300, bg = 'transparent')
 

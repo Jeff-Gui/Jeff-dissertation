@@ -7,10 +7,11 @@ source('enrich_utils.R')
 source('/Users/jefft/Desktop/p53_project/scripts/ccle_utils.R')
 source('/Users/jefft/Desktop/Manuscript/set_theme.R')
 # TCGA-pan_VS-mutneg_ult TCGA-pan_VS-wt TCGA-pan_VS-wt_ploid
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_CNA'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'GO') # GO or GO_MF
 data_out = file.path(dir_home, 'data_out')
+cache = FALSE
 
 flt_df = function(go_df, cutoff=0.01){
   bg = sapply(go_df$GeneRatio, function(x){eval(parse(text = x))})
@@ -95,7 +96,6 @@ write.table(sry, file.path(dir_home, 'output_summary.txt'), row.names = F, quote
 ## Gene ontology enrichment and also enrichment of transcription factors
 
 ### Run GO
-cache = TRUE
 if (cache){
   # load(file.path(dir_home, 'GO_result.RData'))
   load(file.path(dir_home, 'GO_BP_result_no_BG_filter.RData'))

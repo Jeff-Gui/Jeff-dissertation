@@ -1,6 +1,6 @@
 setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 # TCGA-pan_VS-mutneg_ult, TCGA-pan_VS-wt, TCGA-pan_VS-null
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-null'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'control')
 data_out = file.path(dir_home, 'data_out')
@@ -52,6 +52,20 @@ ctrs = ctrs[-which(duplicated(ctrs)),]
 # check if control genes are expressed
 load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
 mtx = as.data.frame(mtx)
+
+# summarize discovered genes, for doing stat test
+smm_cancer = data.frame()
+for (i in unique(coll$experiment)){
+  cr = toupper(strsplit(i, split='_')[[1]][2])
+  all = sum(mtx[,cr]==1)
+  pos = length(unique(coll[coll$experiment==i & coll$beta>0 & 
+                           coll$protein_change=='hot_spot' & coll$FDR<0.05,'gene']))
+  neg = length(unique(coll[coll$experiment==i & coll$beta<0 & 
+                           coll$protein_change=='hot_spot' & coll$FDR<0.05,'gene']))
+  smm_cancer = rbind(smm_cancer, c(cr,all,pos,neg))
+}
+colnames(smm_cancer) = c('Cancer', 'All', 'Positive', 'Negative')
+
 no_exp = c()
 for (gn in unique(ctrs$Gene)){
   if (!gn %in% rownames(mtx)){
@@ -103,11 +117,14 @@ ctr_long$mutation = factor(ctr_long$mutation, levels = mutation_to_plt)
 ctr_long$cancer = toupper(sapply(ctr_long$experiment, function(x){return(strsplit(x, split='_')[[1]][2])}))
 
 # see how many genes cen be recovered in each cancer, hotspot only ====
+sm_tb_stat_coll = list()
 xtme = theme(axis.text.x = element_text(angle=45, size=12, vjust = 0.7),
              legend.text = element_text(size=12), legend.direction = 'horizontal')
+ctr_long = ctr_long[ctr_long$cancer!='OV',]
 #### wt control one
 ctr1 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control')
 ctr1 = ctr1[ctr1$mutation=='Hotspots',]
+ctr1[ctr1$FDR>0.05 & !is.na(ctr1$FDR), c('beta','FDR','wrong')] = NA
 trh = ceiling(length(unique(ctr1$Gene))/2) # must get half of genes recovered
 sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                         wrong_hit=length(which(wrong==FALSE)),
@@ -116,6 +133,7 @@ sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
 sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
 print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
 print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
+sm_tb_stat_coll[['ctr1']] = sm_tb_stat
 ftr_ctr1 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr1)
@@ -123,7 +141,7 @@ ctr1_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Downregulate controls 1') +
+  labs(y='Count', x='', title='Downregulated controls 1') +
   scale_fill_d3(palette = 'category20', name = '', labels = c('Recovered','Not recovered','Recovered with the wrong sign')) +
   mytme + xtme
 sm_tb_ctr1 = sm_tb[sm_tb$gp=='hit',]
@@ -131,6 +149,7 @@ sm_tb_ctr1 = sm_tb[sm_tb$gp=='hit',]
 #### wt control 2
 ctr1 = subset(ctr_long, ctr_long$Gene_annotation=='wt_control_2')
 ctr1 = ctr1[ctr1$mutation=='Hotspots',]
+ctr1[ctr1$FDR>0.05 & !is.na(ctr1$FDR), c('beta','FDR','wrong')] = NA
 trh = ceiling(length(unique(ctr1$Gene))/2) # must get half of genes recovered
 sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==TRUE)),
                                                 wrong_hit=length(which(wrong==FALSE)),
@@ -139,6 +158,7 @@ sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
 sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
 print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
 print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
+sm_tb_stat_coll[['ctr2']] = sm_tb_stat
 ftr_ctr2 = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_ctr2)
@@ -146,7 +166,7 @@ ctr2_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Downregulate controls 2') +
+  labs(y='Count', x='', title='Downregulated controls 2') +
   scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
   mytme + xtme + theme(legend.position = 'none')
 sm_tb_ctr2 = sm_tb[sm_tb$gp=='hit',]
@@ -154,6 +174,7 @@ sm_tb_ctr2 = sm_tb[sm_tb$gp=='hit',]
 #### positive controls
 ctr1 = subset(ctr_long, !ctr_long$Gene_annotation %in% c('wt_control', 'wt_control_2'))
 ctr1 = ctr1[ctr1$mutation=='Hotspots',]
+ctr1[ctr1$FDR>0.05 & !is.na(ctr1$FDR), c('beta','FDR','wrong')] = NA
 trh = ceiling(length(unique(ctr1$Gene))/2) # must get half of genes recovered
 sm_tb = ctr1 %>% group_by(cancer) %>% summarise(hit=length(which(wrong==FALSE)),
                                                 wrong_hit=length(which(wrong==TRUE)),
@@ -162,6 +183,7 @@ sm_tb = sm_tb[order(sm_tb$hit, decreasing = T),]
 sm_tb_stat = sm_tb[!sm_tb$cancer %in% c('LUAD','LUSC','OV'),]
 print(sd(sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4])))
 print(mean((sm_tb_stat$hit / rowSums(sm_tb_stat[,2:4]))))
+sm_tb_stat_coll[['pos']] = sm_tb_stat
 ftr_pos = sm_tb$cancer
 sm_tb = gather(sm_tb, key='gp', value='count', 2:4)
 sm_tb$cancer = factor(sm_tb$cancer, levels = ftr_pos)
@@ -169,7 +191,7 @@ pos_count = ggplot(sm_tb, aes(x=cancer, y=count)) +
   geom_bar(aes(fill=gp), stat='identity',position = 'stack') +
   scale_y_continuous(breaks = trh, expand = c(0,0)) +
   geom_hline(yintercept = trh, linetype='dotted') +
-  labs(y='Count', x='', title='Upregulate controls') +
+  labs(y='Count', x='', title='Upregulated controls') +
   scale_fill_d3(palette = 'category20', name = '', labels = c('Hit','Not detected','Wrong hit')) +
   mytme + xtme + theme(legend.position = 'none')
 sm_tb_pos = sm_tb[sm_tb$gp=='hit',]
@@ -197,12 +219,55 @@ rank_pfl = ggplot(mtx) +
   labs(x='', y='Sum of hit counts') +
   scale_fill_d3() +
   mytme +xtme
+
+# Test if there is any enrichment in eQTL analysis
+fishp = matrix(0, nrow=length(unique(sm_tb_stat$cancer)), ncol=length(unique(names(sm_tb_stat_coll))))
+colnames(fishp) = names(sm_tb_stat_coll)
+rownames(fishp) = unique(sm_tb_stat$cancer)
+fishp = as.data.frame(fishp)
+fishod = fishp
+for (i in names(sm_tb_stat_coll)){
+  fjn = full_join(sm_tb_stat_coll[[i]], smm_cancer, by=c('cancer'='Cancer'))
+  for (j in 1:nrow(fjn)){
+    if (i=='pos'){
+      rvg = as.numeric(fjn$Positive[j])
+    } else {
+      rvg = as.numeric(fjn$Negative[j])
+    }
+    if (!is.na(fjn$hit[j])){
+      mn = matrix(c(fjn$hit[j], fjn$not_detected[j]+fjn$wrong_hit[j], 
+                    rvg-fjn$hit[j], 
+                    as.numeric(fjn$All[j])-rvg-fjn$not_detected[j]-fjn$wrong_hit[j]),nrow=2)
+      pv = fisher.test(mn)$p.value
+      od = fisher.test(mn)$estimate
+      fishp[fjn$cancer[j], i] = toSig(pv)
+      fishod[fjn$cancer[j], i] = od
+    } else {
+      fishp[fjn$cancer[j], i] = toSig(NA)
+      fishod[fjn$cancer[j], i] = NA
+    }
+  }
+}
+
+fishp[fishp==''] = 'na'
+fishp$cancer = rownames(fishp)
+fishp = fishp[fishp$cancer!='OV',]
+
+ctr1_count = ctr1_count + geom_text(data=fishp, aes(x=cancer,y=28,label=ctr1), 
+                                    color='white', fontface='bold', size=5, vjust=0)
+ctr2_count = ctr2_count + geom_text(data=fishp, aes(x=cancer,y=12,label=ctr2), 
+                                    color='white', fontface='bold',size=5, vjust=0)
+pos_count = pos_count + geom_text(data=fishp, aes(x=cancer,y=33.7,label=pos), 
+                                    color='white', fontface='bold',size=5, vjust=0)
+
+
 marrangeGrob(grobs=list(rank_pfl, ctr1_count + theme(legend.position = 'none'), 
                         ctr2_count, pos_count),ncol=4,nrow=1, top='') %>% 
-  ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount.pdf'),
+  ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-wFDR_hitCount.pdf'),
          plot=., width=11.69*1.5,height=8.27*0.5,units='in',device='pdf',dpi=300)
-ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount_legend.pdf'),
+ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-wFDR_hitCount_legend.pdf'),
        plot=ctr1_count, width=11.69*0.7,height=8.27*0.5,units='in',device='pdf',dpi=300)
+save(sm_tb_stat_coll, file = file.path(data_out, 'control_summary.RData'))
 
 # marrangeGrob(grobs=list(rank_pfl, ctr1_count, pos_count, ctr2_count),ncol=2,nrow=2, top='') %>% 
 #   ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_hitCount.pdf'),
@@ -295,7 +360,7 @@ ctr_long_plt_3 = subset(ctr_long_breast, !ctr_long_breast$Gene_annotation %in% c
 ctr_long_plt_1 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control')
 ctr_long_plt_2 = subset(ctr_long_breast, ctr_long_breast$Gene_annotation=='wt_control_2')
 df_list = list(ctr_long_plt_1, ctr_long_plt_2, ctr_long_plt_3)
-tle = c('BRCA downregulate controls 1', 'BRCA downregulate controls 2', 'BRCA upregulate controls')
+tle = c('BRCA downregulated controls 1', 'BRCA downregulated controls 2', 'BRCA upregulated controls')
 for (j in 1:length(df_list)){
   ctr_long_plt = df_list[[j]]
   for (i in unique(ctr_long_plt$experiment)){
@@ -342,8 +407,9 @@ ggsave(file.path(plot_out, 'TCGA-pan_VS-mutneg_ult-noFDR_Ctr_BRCA_legend.pdf'),
        height=8, width=12,units='in',device='pdf',dpi=300)
 
 ### Conflicting result ===
-load('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData')
-tcga = dt
+tcga = load_clean_data('/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData',
+                       check_cna_wt = T)
+
 load('/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData')
 ccle = dt
 remove(dt)
@@ -403,7 +469,8 @@ plt = get_genes_plt(genes=genes, ccle=ccle, tcga=tcga, mutation_groups,
               comparison = list('rna'=list(c('HS cont.', 'Wildtype'),
                                            c('HS conf.', 'HS cont.'),
                                            c('HS conf.', 'Wildtype'))),
-              no_ccle = TRUE, plot_n = FALSE, plot_nonsense = F)
+              no_ccle = TRUE, plot_n = TRUE, plot_nonsense = F,
+              no_anova = T)
 
 for (i in 1:length(plt$plots)){
   plt$plots[[i]] = plt$plots[[i]] + labs(x='',y=toupper(strsplit(names(plt$plots)[i], split='_')[[1]][1]))

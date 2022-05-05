@@ -17,6 +17,36 @@ library(stringr)
 library(ggrepel)
 library(ggsci)
 
+# Count of controls ====
+load('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/data_out/control_summary.RData')
+count_inA = sm_tb_stat_coll
+load('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid/data_out/control_summary.RData')
+count_exA = sm_tb_stat_coll
+for (i in names(count_inA)){
+  count_inA[[i]] = full_join(count_inA[[i]], count_exA[[i]], by='cancer', suffix=c('inA','exA'))
+  count_inA[[i]]$group = i
+}
+count_coll = Reduce(rbind, count_inA)
+count_coll = gather(count_coll, key='condition',value='count', c(2,5)) # two hit col
+count_coll$cancer = factor(count_coll$cancer, levels = c('BRCA', 'LGG', 'BLCA', 'COAD', 'HNSC', 'STAD'))
+g = ggplot(count_coll, aes(x=cancer, y=count)) +
+  geom_bar(aes(fill=condition), position = 'dodge', stat = 'identity') +
+  facet_wrap(~group, scale='free_y') +
+  mytme +
+  scale_y_continuous(expand=expansion(mult = c(0,0.1)), breaks=seq(0,25,5)) +
+  scale_fill_manual(name='', values = c('#BCBD22FF','#E377C2FF'), labels=c('- ploidy', '+ ploidy')) +
+  theme(strip.background = element_rect(fill='transparent'),
+        legend.direction = 'horizontal',
+        strip.text = element_text(face = 'bold', size=12),
+        axis.text.x = element_text(angle=45, hjust = 1, vjust=1),
+        axis.title.y = element_text(size=14)) +
+  labs(x='', y='Count of\ndetected controls')
+g
+ggsave(file.path(plot_out,'control', 'compare_control_ploid_count.pdf'),
+       plot=g, width=11.69*0.8, height=8.27*0.4,units='in',device='pdf',dpi=300)
+
+
+
 # Load Gene ========
 beta_cutoff = 0
 coll = load_eQTL_output('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/outputs', 
@@ -30,19 +60,24 @@ smm = full_join(coll %>% group_by(cancer) %>% summarise(count_pos=sum(beta>0), c
           by='cancer', suffix = c('.pldin','.pldout'))
 smm[is.na(smm)] = 0
 smm_plt = smm[smm$cancer!='LUSC',]
-g = ggplot(gather(smm_plt, key='group',value='count',2:ncol(smm))) +
-  geom_bar(aes(x=group,y=count), stat = 'identity') +
-  facet_wrap(~cancer, scale='free_y') + mytme +
-  scale_fill_d3(palette = 'category20') +
-  scale_y_continuous(expand = c(0,0)) +
-  theme(axis.text.x = element_text(angle=45, hjust = 1, vjust = 1),
+smm_plt = gather(smm_plt, key='group', value='count', 2:ncol(smm))
+gps = as.data.frame(t(as.data.frame(strsplit(smm_plt$group, split='\\.'))))
+colnames(gps) = c('sign', 'condition')
+rownames(gps) = NULL
+smm_plt = cbind(smm_plt, gps)
+smm_plt$cancer = factor(smm_plt$cancer, levels=c('BRCA', 'LGG','BLCA','COAD', 'HNSC', 'STAD'))
+g = ggplot(smm_plt) +
+  geom_bar(aes(x=sign,y=count,fill=condition), stat = 'identity', position = 'dodge') +
+  facet_wrap(~cancer, scale='free') + mytme +
+  scale_fill_manual(name='', values=c('#E377C2FF','#BCBD22FF'), labels=c('+ ploidy', '- ploidy')) +
+  scale_y_continuous(expand = expansion(mult=c(0,0.1))) +
+  theme(
         strip.background = element_rect(fill='transparent'),
         strip.text.x = element_text(face='bold', size=11)) +
   labs(x='',y='Gene count') +
-  scale_x_discrete(labels=c('Negative', 'Negative (- ploidy)',
-                            'Positive', 'Positive (- ploidy)'))
+  scale_x_discrete(labels=c('Negative', 'Positive'))
 ggsave(file.path(plot_out, 'compare_ploid_count.pdf'),
-       plot=g, width=11.69*0.5, height=8.27*0.5,units='in',device='pdf',dpi=300)
+       plot=g, width=11.69*0.7, height=8.27*0.8,units='in',device='pdf',dpi=300)
 
 for (j in 1:nrow(smm)){
   print(smm$cancer[j])

@@ -16,6 +16,7 @@ mytme = theme(
   plot.margin = margin(rep(0.5,4), unit = 'lines'),
   legend.title = element_text(family='sans', size=14, colour='black'),
   legend.direction = 'vertical',
+  legend.key = element_rect(fill='transparent'),
   rect = element_rect(fill = 'transparent')
 )
 

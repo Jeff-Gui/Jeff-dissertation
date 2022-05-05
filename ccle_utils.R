@@ -88,8 +88,8 @@ load_crispr_score = function(fp = '/Users/jefft/Desktop/p53_project/datasets/CCL
 get_genes_plt = function(genes, ccle, tcga, mutation_groups, 
                          primary_site, rnai=NULL, comparison=NULL,
                          no_rnai=FALSE, no_ccle=FALSE, flt_other=TRUE, no_plot=FALSE,
-                         plot_nonsense=TRUE, plot_n=TRUE,
-                         anovalabel.x.npc = 0.1, anovalabel.y.npc = 0.1){
+                         plot_nonsense=TRUE, plot_ccle_nonsense = FALSE, plot_n=TRUE,
+                         anovalabel.x.npc = 0.1, anovalabel.y.npc = 0.1, no_anova=F){
   # flt_other: filter mutation not belonging to nonsense, missense or frameshift, or multiple mutations. 
   # no_plot: remove any plot, return dataframe only.
   source('/Users/jefft/Desktop/Manuscript/set_theme.R')
@@ -196,7 +196,11 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
       df_plt = subset(df_plt, db=='TCGA')
     }
     if (!plot_nonsense){
-      df_plt = subset(df_plt, df_plt$itg_state != 'Nonsense')
+      if (plot_ccle_nonsense){
+        df_plt = subset(df_plt, df_plt$itg_state != 'Nonsense' | df_plt$db=='CCLE')
+      } else {
+        df_plt = subset(df_plt, df_plt$itg_state != 'Nonsense')
+      }
     }
     
     tukey = NULL
@@ -225,14 +229,14 @@ get_genes_plt = function(genes, ccle, tcga, mutation_groups,
       }
       if (!is.null(comparison$rna)){
         a = a + stat_compare_means(comparisons = comparison$rna, method = 't.test', label = 'p.signif')
-        if (length(table(df_plt$itg_state))>2){
+        if (length(table(df_plt$itg_state))>2 & !no_anova){
           a = a +  stat_compare_means(method = 'anova', label.y.npc = anovalabel.y.npc, label.x.npc = anovalabel.x.npc)
         }
       }
     }
     
   
-    if (flag & !no_plot){
+    if (flag & !no_plot & !no_rnai){
       b = ggplot(subset(df_plt, df_plt$db=='CCLE' & !is.na(df_plt$gene_rnai)), 
                  aes(x=itg_state, y=gene_rnai)) +
         geom_violin() +

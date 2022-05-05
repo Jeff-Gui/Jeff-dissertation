@@ -31,6 +31,7 @@ for (config_name in config_names) {
   use_cache = TRUE # cached data (clean_data.RData)
   use_cache_geno_pca = TRUE # cached genotype PCs
   source = TRUE
+  check_cna_wt = FALSE
   
   ## Handle config
   default_cfg = yaml.load_file(file.path('config', default_cfg_name))
@@ -159,6 +160,18 @@ for (config_name in config_names) {
     wt_spl = colnames(snps)[colnames(snps) %in% ann$nonsense]
   } else {
     wt_spl = colnames(snps)[!colnames(snps) %in% unlist(ann)]
+    if (check_cna_wt){
+      orln = length(wt_spl)
+      cna = read.table(file.path(config$dataset$dataset_home,config$dataset$cna_nm), sep='\t', header = T)
+      norm_wt = colnames(cna)[which(cna[cna$Hugo_Symbol=='TP53',]==0)]
+      norm_wt = gsub('\\.', '-', norm_wt)
+      wt_spl = intersect(wt_spl, norm_wt)
+      loginfo(logger = 'main', 'Filtering %d copy-number normal wildtype p53 out of %d.', length(wt_spl), orln)
+      if (length(wt_spl)<10){
+        loginfo(logger = 'main', 'Too few WT, skipping this dataset.')
+        next
+      }
+    }
   }
   gene = as.matrix(gene)
   cvrt = as.matrix(cvrt)

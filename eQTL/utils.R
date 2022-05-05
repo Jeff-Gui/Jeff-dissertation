@@ -508,6 +508,7 @@ load_eQTL_output = function(dir_home, exclude=NULL, mode='fdr', beta=NULL, as_df
 
 
 load_clean_data = function(fp, ann_p53=TRUE, ann_bin_mut_list=NULL, mode=NULL, use_VAF_tcga=FALSE,
+                           check_cna_wt = FALSE,
                 meta_mut_home='/Users/jefft/Desktop/p53_project/datasets/meta_muts/'){
   # mode: tcga or ccle, if not specified, analyze from fp
   # load clean data while specifying the mutation state
@@ -535,11 +536,26 @@ load_clean_data = function(fp, ann_p53=TRUE, ann_bin_mut_list=NULL, mode=NULL, u
   
   meta_mut = load_meta_mut(file.path(meta_mut_home, list.files(meta_mut_home)))
   load(fp)
+  
   if (ann_p53){
     p53_ann = annotate_sample_mut(dt[[2]]@data)
     dt[[1]]@colData[['p53_state']] = 'Wildtype'
     for (i in names(p53_ann)){
       dt[[1]]@colData[p53_ann[[i]], 'p53_state'] = i
+    }
+    if (check_cna_wt){
+      cna_fp = dirname(fp)
+      cna_fp = file.path(list.dirs(cna_fp, recursive = F), 'data_cna.txt')
+      cna = read.table(cna_fp, sep='\t', header = T)
+      norm_wt = colnames(cna)[which(cna[cna$Hugo_Symbol=='TP53',]==0)]
+      norm_wt = gsub('\\.', '-', norm_wt)
+      wt_spl = intersect(rownames(dt[[1]]@colData)[dt[[1]]@colData$p53_state=='Wildtype'], norm_wt)
+      other_spl = rownames(dt[[1]]@colData)[dt[[1]]@colData$p53_state!='Wildtype']
+      dt[[1]] = subsetByColumn(dt[[1]], c(wt_spl, other_spl))
+    }
+  } else {
+    if (check_cna_wt){
+      print('Must set ann_p53=TRUE to run check_cna_wt. Skipping this step.')
     }
   }
   sps = rownames(dt[[1]]@colData)
@@ -656,7 +672,7 @@ annotate_mut_group = function(dt, check_muts, as.mtx=TRUE){
 
 
 gen_bed_GOI = function(GOI, chr_prefix=FALSE, output=NULL, expand=c(-1000,1000),
-                       genepos='/Users/jefft/Desktop/p53_project/scripts/eQTL/hg38_gene_table_autosome.tsv'){
+                       genepos='/Users/jefft/Desktop/p53_project/scripts/eQTL/hg38_gene_table.tsv'){
   if (length(expand)==1){
     expand = c(-expand[1], expand[1])
   }
@@ -687,4 +703,30 @@ gen_bed_GOI = function(GOI, chr_prefix=FALSE, output=NULL, expand=c(-1000,1000),
   }
   return(rt_df)
 }
+
+
+toSig = function(x){
+  if (is.na(x)){
+    return('')
+  } else {
+    if (x<0.0001){
+      return('****')
+    } else {
+      if (x<0.001){
+        return('***')
+      } else {
+        if (x<0.01){
+          return('**')
+        } else {
+          if (x<0.05){
+            return('*')
+          } else {
+            return('ns')
+          }
+        }
+      }
+    }
+  }
+}
+
 
