@@ -66,8 +66,31 @@ colnames(gps) = c('sign', 'condition')
 rownames(gps) = NULL
 smm_plt = cbind(smm_plt, gps)
 smm_plt$cancer = factor(smm_plt$cancer, levels=c('BRCA', 'LGG','BLCA','COAD', 'HNSC', 'STAD'))
-g = ggplot(smm_plt) +
-  geom_bar(aes(x=sign,y=count,fill=condition), stat = 'identity', position = 'dodge') +
+# add error bar to count
+bar = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/data_out/hotspot_count_smm_bootstrap.txt', sep='\t', header = T)
+bar_ploid = read.table('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid/data_out/hotspot_count_smm_bootstrap.txt', sep='\t', header = T)
+
+smm_plt$low=NA
+smm_plt$high=NA
+for (i in 1:nrow(smm_plt)){
+  if (smm_plt$condition[i]=='pldin'){
+    bar_sub = bar[bar$cancer==smm_plt$cancer[i],]
+  } else {
+    bar_sub = bar_ploid[bar_ploid$cancer==smm_plt$cancer[i],]
+  }
+  if (smm_plt$sign[i]=='count_pos'){
+    smm_plt$high[i] = bar_sub$count_pos_Up[1]
+    smm_plt$low[i] = bar_sub$count_pos_Low[1]
+  } else {
+    smm_plt$high[i] = bar_sub$count_neg_Up[1]
+    smm_plt$low[i] = bar_sub$count_neg_Low[1]
+  }
+}
+
+g = ggplot(smm_plt, aes(x=sign, y=count, fill=condition)) +
+  geom_bar(stat = 'identity', position = 'dodge') +
+  geom_errorbar(aes(ymin=low, ymax=high, group=condition), width=0.5,
+                position = position_dodge(width = 0.9)) +
   facet_wrap(~cancer, scale='free') + mytme +
   scale_fill_manual(name='', values=c('#E377C2FF','#BCBD22FF'), labels=c('+ ploidy', '- ploidy')) +
   scale_y_continuous(expand = expansion(mult=c(0,0.1))) +
@@ -76,7 +99,7 @@ g = ggplot(smm_plt) +
         strip.text.x = element_text(face='bold', size=11)) +
   labs(x='',y='Gene count') +
   scale_x_discrete(labels=c('Negative', 'Positive'))
-ggsave(file.path(plot_out, 'compare_ploid_count.pdf'),
+ggsave(file.path(plot_out, 'compare_ploid_count_new.pdf'),
        plot=g, width=11.69*0.7, height=8.27*0.8,units='in',device='pdf',dpi=300)
 
 for (j in 1:nrow(smm)){
@@ -130,7 +153,7 @@ g = ggplot(joinTb[!joinTb$missing,],
   scale_y_continuous(limits = c(-3,3), breaks = seq(-3,3,2)) +
   geom_vline(xintercept = 0, color='grey30') +
   geom_hline(yintercept = 0, color='grey30') +
-  geom_abline(intercept = 0, slope = 1, color='grey30', linetype='dotted') +
+  #geom_abline(intercept = 0, slope = 1, color='grey30', linetype='dotted') +
   #geom_abline(intercept = 0, slope = -1, color='grey30', linetype='dotted') +
   geom_point(size=0.1, color='coral',alpha=0.5) + mytme +
   geom_jitter(data=joinTb[joinTb$missing & joinTb$beta.pldin==0,],color='royalblue', size=0.1, alpha=0.5,
@@ -138,11 +161,16 @@ g = ggplot(joinTb[!joinTb$missing,],
   geom_jitter(data=joinTb[joinTb$missing & joinTb$beta.pldout==0,],color='royalblue', size=0.1, alpha=0.5,
               width = 0, height = 0.2) +
   theme(strip.background = element_rect(fill=NA),
-        strip.text = element_text(face='bold', size=12)) +
-  labs(x='Beta not considering aneuploidy', y='Beta aneuploidy as a covariate') +
+        strip.text = element_text(face='bold', size=12),
+        axis.title.x = element_text(size=13),
+        axis.title.y = element_text(size=13)) +
+  stat_cor(aes(label = ..rr.label..), label.x = -2.5) +
+  geom_smooth(method = 'lm', size=0.5, linetype='dotted', color='black', fill=NA) +
+  labs(x='Beta (+ ploidy)', y='Beta (- ploidy)') +
   facet_wrap(~cancer)
+g
 ggsave(file.path(plot_out, 'beta_overview.pdf'),
-       plot=g, width=11.69*0.7, height=8.27*0.7,units='in',device='pdf',dpi=300)
+       plot=g, width=11.69*0.75, height=8.27*0.7,units='in',device='pdf',dpi=300)
 
 missing_gene = joinTb[joinTb$missing,]
 missing_gene$group = NA

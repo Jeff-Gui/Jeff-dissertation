@@ -169,6 +169,7 @@ qtl_pool = rownames(mtx)[mtx$BRCA==1]
 
 library(parallel)
 #detectCores()
+set.seed(3.180110984)
 cl = makeCluster(8)
 clusterExport(cl, c('deg','qtl_pool','nsize','annotate'))
 
@@ -194,9 +195,10 @@ null_dis = null_dis[order(null_dis$gp),]
 print(sum(is.na(null_dis)))
 null_dis[is.na(null_dis)] = 0
 
+null_dis_plt = null_dis %>% gather(key='cls', value='freq', 1:4) %>%
+  mutate(gp=factor(gp, levels = rev(flv)))
 lb_gp = c('Union', 'Core','Core (cell cycle GO)', 'Non-core', 'Contact','Contact (neural GO)','Contact (adhesion GO)', 'Conformation', 'Sandwich')
-g = ggplot(null_dis %>% gather(key='cls', value='freq', 1:4) %>%
-         mutate(gp=factor(gp, levels = rev(flv)))) +
+g = ggplot(null_dis_plt) +
   geom_boxplot(aes(y=gp,x=100*as.numeric(freq)),alpha=1, width=0.5, outlier.size = 0.5) +
   geom_point(data = smm, aes(x=100*freq,y=gp), color='red', shape=15) +
   facet_wrap(~cls, scales = 'free_x', nrow=1,
@@ -211,12 +213,40 @@ g = ggplot(null_dis %>% gather(key='cls', value='freq', 1:4) %>%
         panel.border = element_rect(fill='transparent',size=1)) +
   scale_color_d3(palette = 'category20')
 
-# library(gridExtra)
-# p_tab = tableGrob(paste('n=',nsize[rev(flv)],sep=''))
-# grid.arrange(g, p_tab, ncol = 2, padding=0)
-
 ggsave(file.path(plot_out,'BRCA', 'compositionVSnormal_bootstrap_fromQTL.pdf'),
        plot = g, width=11.67*0.8, height=8.27*0.5, units='in', device='pdf', dpi=300, bg = 'transparent')
+
+# for centred at 1 plot
+obs = smm$freq
+names(obs) = paste(smm$cls, smm$gp, sep='-')
+qry = paste(null_dis_plt$cls, null_dis_plt$gp, sep='-')
+null_dis_plt$freq_norm =  as.numeric(obs[qry]) / as.numeric(null_dis_plt$freq)
+quantile_plt = null_dis_plt %>% group_by(cls, gp) %>% dplyr::summarise(low=quantile(freq_norm, probs=0.025),
+                                                        high=quantile(freq_norm, probs=0.975),
+                                                        med=median(freq_norm))
+g = ggplot(null_dis_plt, aes(y=gp)) +
+  geom_vline(xintercept = 1, color='red', size=0.5) +
+  # geom_boxplot(aes(x=freq_norm), alpha=1, width=0.5, outlier.size = 0.5) +
+  geom_point(data=quantile_plt, aes(x=med), size=2) +
+  geom_errorbar(data=quantile_plt, aes(xmax=high, xmin=low), 
+                width=0, size=0.7) +
+  facet_wrap(~cls, scales = 'fixed', nrow=1,
+             labeller = labeller(cls=c('down'='Low','ND'='Not detected', 
+                                       'noSig'='No significance', 'up'='High'))) +
+  scale_y_discrete(labels=rev(lb_gp)) +
+  scale_x_continuous(expand = c(0.1,0.1)) +
+  labs(x='Fold enrichment or depletion', y='') +
+  mytme +
+  theme(legend.direction = 'horizontal', strip.background = element_rect(fill='transparent'),
+        strip.text = element_text(size=12, face='bold'),
+        panel.grid.major.y = element_line(color='grey70', size=0.3, linetype='dotted'),
+        panel.border = element_rect(fill='transparent',size=1),
+        axis.title.x = element_text(size=14)) +
+  scale_color_d3(palette = 'category20')
+g
+ggsave(file.path(plot_out,'BRCA', 'compositionVSnormal_odd_bootstrap_fromQTL.pdf'),
+       plot = g, width=11.67*0.8, height=8.27*0.5, units='in', device='pdf', dpi=300, bg = 'transparent')
+
 
 
 g = ggplot(smm, 
@@ -272,58 +302,66 @@ ggplot(df.plt, aes(x=itg_gp, y=get(gene))) +
 
 # plot per gene (rankNorm data - eQTL input) ====
 fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA-GTEX/clean_data.RData'
-tcga.gtex = load_clean_data(fp,ann_bin_mut_list = c('contact'))
+tcga.gtex = load_clean_data(fp,ann_bin_mut_list = c('contact', 'sandwich', 'conformation', 'p.R273H'))
+
+gene = 'PPM1F' # !!! choose your GOI
+
 meta = as.data.frame(tcga.gtex[[1]]@colData)
-meta$p53_state[meta$has_contact==1] = 'contact'
-gene = 'SUN2'
+meta$p53_state[meta$has_contact==1 | meta$has_p.R273H==1] = 'contact'
+meta$p53_state[meta$has_conformation==1] = 'conformation'
+meta$p53_state[meta$has_sandwich==1] = 'sandwich'
+meta = meta[meta$p53_state!='missense',]
+
 df.plt = cbind(t(assay(tcga.gtex[[1]][gene,rownames(meta),'RNA'])), meta)
 df.plt$itg_gp = paste(df.plt$study, df.plt$p53_state, sep=' ')
 df.plt$itg_gp = recode_factor(df.plt$itg_gp,'GTEX Wildtype'='nm',
-                              'TCGA missense' = 'cmis',
+                              'TCGA Wildtype' = 'cwt',
                               'TCGA contact' = 'ccon',
+                              'TCGA conformation' = 'cconf',
+                              'TCGA sandwich' = 'csand',
                               .ordered=TRUE)
 ggplot(df.plt, aes(x=itg_gp, y=get(gene))) +
   geom_violin() + geom_boxplot(width=0.2, outlier.shape = NA) +
   labs(x='', y='Normalised expression', title=gene) +
-  scale_x_discrete(labels = c('Normal breast',
-                              'BRCA\np53 non-contact\nmissense',
-                              'BRCA\np53 contact\nmissense')) +
-  stat_compare_means(comparisons = list(c('nm', 'cmis'),
+  # scale_x_discrete(labels = c('Normal breast',
+  #                             'BRCA\np53 non-contact\nmissense',
+  #                             'BRCA\np53 contact\nmissense')) +
+  stat_compare_means(comparisons = list(c('nm', 'ccon'),
                                         c('cmis', 'ccon'),
                                         c('nm', 'ccon'))) +
   # stat_compare_means(method = 'anova') +
   mytme
 
-# plot heatmap ====
-df.plt = as.data.frame(t(expr))
-df.plt = gather(df.plt %>% mutate(sample=rownames(df.plt)), key='gene', value='expression', 1:length(GOI))
-df.plt$gene = factor(df.plt$gene, levels=GOI)
-idt = paste('has_', mut_groups, sep='')
-all_mis = intersect(which(df.plt$p53_state=='missense'), which(rowSums(df.plt[idt])==1))
-df.plt = df.plt[c(which(df.plt$p53_state == 'Wildtype'),
-                  which(df.plt$p53_state == 'nonsense'),
-                  all_mis),]
-df.plt = df.plt[order(df.plt$gene, rowSums(df.plt[idt])),]
-df.plt$sample = factor(df.plt$sample, levels = df.plt$sample[1:(nrow(df.plt)/length(GOI))])
-myPalette = colorRampPalette(c("#1F77B4FF",'white', '#D62728FF'))
-sc = scale_fill_gradientn(colours = myPalette(50), name='Normalized expression')
-
-df.plt$plt_gp = df.plt$p53_state
-df.plt$plt_gp = gsub('Wildtype', paste('WT', sum(df.plt$p53_state=='Wildtype') / length(GOI), sep=' n='), df.plt$plt_gp)
-df.plt$plt_gp = gsub('nonsense', paste('NS', sum(df.plt$p53_state=='nonsense') / length(GOI), sep=' n='), df.plt$plt_gp)
-for (i in idt){
-  lb = paste(str_to_sentence(strsplit(i, split='_')[[1]][2]),sum(df.plt[i]==1) / length(GOI), sep=' n=')
-  df.plt$plt_gp[df.plt[i]==1] = lb
-}
-
-g = ggplot(df.plt) +
-  geom_tile(aes(x=sample, y=gene, fill=expression), width=1) +
-  #geom_vline(xintercept = n_sample[1], size=1, alpha=0.7) +
-  sc + mytme + labs(x='', y='') +
-  facet_grid(~plt_gp,scale='free_x', space='free') +
-  theme(legend.direction = 'horizontal', axis.text.x = element_blank(),
-        strip.background = element_rect(fill = 'transparent'),
-        axis.line.x = element_blank(), axis.ticks.x = element_blank(),
-        strip.text = element_text(face='bold', size=12),
-        panel.border = element_rect(color='black', fill='transparent', size=1.5)) 
-
+# # plot heatmap ====
+# df.plt = as.data.frame(t(expr))
+# df.plt = gather(df.plt %>% mutate(sample=rownames(df.plt)), key='gene', value='expression', 1:length(GOI))
+# df.plt$gene = factor(df.plt$gene, levels=GOI)
+# idt = paste('has_', mut_groups, sep='')
+# all_mis = intersect(which(df.plt$p53_state=='missense'), which(rowSums(df.plt[idt])==1))
+# df.plt = df.plt[c(which(df.plt$p53_state == 'Wildtype'),
+#                   which(df.plt$p53_state == 'nonsense'),
+#                   all_mis),]
+# df.plt = df.plt[order(df.plt$gene, rowSums(df.plt[idt])),]
+# df.plt$sample = factor(df.plt$sample, levels = df.plt$sample[1:(nrow(df.plt)/length(GOI))])
+# myPalette = colorRampPalette(c("#1F77B4FF",'white', '#D62728FF'))
+# sc = scale_fill_gradientn(colours = myPalette(50), name='Normalized expression')
+# 
+# df.plt$plt_gp = df.plt$p53_state
+# df.plt$plt_gp = gsub('Wildtype', paste('WT', sum(df.plt$p53_state=='Wildtype') / length(GOI), sep=' n='), df.plt$plt_gp)
+# df.plt$plt_gp = gsub('nonsense', paste('NS', sum(df.plt$p53_state=='nonsense') / length(GOI), sep=' n='), df.plt$plt_gp)
+# for (i in idt){
+#   lb = paste(str_to_sentence(strsplit(i, split='_')[[1]][2]),sum(df.plt[i]==1) / length(GOI), sep=' n=')
+#   df.plt$plt_gp[df.plt[i]==1] = lb
+# }
+# 
+# g = ggplot(df.plt) +
+#   geom_tile(aes(x=sample, y=gene, fill=expression), width=1) +
+#   #geom_vline(xintercept = n_sample[1], size=1, alpha=0.7) +
+#   sc + mytme + labs(x='', y='') +
+#   facet_grid(~plt_gp,scale='free_x', space='free') +
+#   theme(legend.direction = 'horizontal', axis.text.x = element_blank(),
+#         strip.background = element_rect(fill = 'transparent'),
+#         axis.line.x = element_blank(), axis.ticks.x = element_blank(),
+#         strip.text = element_text(face='bold', size=12),
+#         panel.border = element_rect(color='black', fill='transparent', size=1.5)) 
+# 

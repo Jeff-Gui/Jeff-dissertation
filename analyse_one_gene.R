@@ -46,7 +46,7 @@ for (i in 1:length(mutation_groups)){
 }
 
 tcga_fp = '/Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/clean_data.RData'
-# ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData'
+#ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE/clean_data_inspect.RData'
 ccle_fp = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd/BRCA/clean_data.RData'
 if (!source){
   # TCGA
@@ -105,10 +105,10 @@ plt = get_genes_plt(genes, ccle, tcga, mutation_groups,
                     primary_site = 'Breast', rnai = NULL,
                     comparison = mycomp, no_rnai = T,
                     flt_other = T, plot_ccle_nonsense = T,
-                    plot_nonsense = T, no_ccle = F, no_anova = T
+                    plot_nonsense = T, no_ccle = F, no_anova = F
 )
 plt$plots %>% marrangeGrob(ncol=3, nrow=2, top = '') %>%
-  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/GOI.pdf',
+  ggsave('/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt/plots/hotspot/GOI_anova.pdf',
          plot=., width=16,height=8,units='in',device='pdf',dpi=300)
 cle = plt$data$BYSL$sample
 cle = cle[cle$db=='CCLE',]
@@ -155,4 +155,13 @@ test = subset(plt_dt, plt_dt$db=='CCLE')
 test = test[order(test$p53_state),]
 write.table(test, '/Users/jefft/Desktop/21Q3.txt', sep='\t', quote=F, row.names = T)
 summary(test$gene_rnai[test$p53_state!='Wildtype'], na.rm=T)
+
+
+# playground ====
+plt = get_genes_plt(genes, ccle, tcga, mutation_groups, 
+                    primary_site = 'Breast', rnai = rnai,
+                    comparison = mycomp,
+                    flt_other = T, 
+                    plot_nonsense = F, no_ccle = F,
+)
 

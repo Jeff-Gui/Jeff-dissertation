@@ -2,7 +2,7 @@ setwd('/Users/jefft/Desktop/p53_project/scripts/eQTL')
 # TCGA-pan_VS-wt, TCGA-pan_VS-mutneg_ult
 # ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE/processed_dt'
 ccle_home = '/Users/jefft/Desktop/p53_project/datasets/CCLE_22Q1/pcd'
-dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt'
+dir_home = '/Users/jefft/Desktop/p53_project/eQTL_experiments/TCGA-pan_VS-wt_ploid'
 eqtl_out = file.path(dir_home, 'outputs')
 plot_out = file.path(dir_home, 'plots', 'hotspot')
 data_out = file.path(dir_home, 'data_out')
@@ -76,16 +76,79 @@ for (i in 1:nrow(hs_smm)){
     hs_smm$mutant_size[i] = ssize[ssize$Cancer==hs_smm$cancer[i],'Mutant']
   }
 }
-g = ggplot(hs_smm[!hs_smm$cancer %in% c('LUSC', 'LUAD', 'OV'),] %>% 
-             gather(key='sign', value='Count', 2:3),
+
+### bootstrap error bar ====
+load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
+mtx = as.data.frame(mtx)
+
+n_loop = 1000
+set.seed(3.180110984)
+hs_smm$count_pos_Up = NA
+hs_smm$count_pos_Low = NA
+hs_smm$count_neg_Up = NA
+hs_smm$count_neg_Low = NA
+for (i in 1:nrow(hs_smm)){
+  cr = as.character(hs_smm$cancer[i])
+  if (cr %in% c('OV', 'LUSC', 'LUAD')){next}
+  print(cr)
+  all_gene = rep('other', sum(mtx[,cr]==1))
+  names(all_gene) = rownames(mtx)[which(mtx[,cr]==1)]
+  pos_gene = hs[hs$cancer==cr & hs$beta>0,'gene']
+  neg_gene = hs[hs$cancer==cr & hs$beta<0,'gene']
+  all_gene[pos_gene] = 'pos'
+  all_gene[neg_gene] = 'neg'
+  negs = c()
+  poss = c()
+  for (j in 1:n_loop){
+    spl = sample(all_gene, replace =T)
+    negs = c(negs, sum(spl=='neg'))
+    poss = c(poss, sum(spl=='pos'))
+  }
+  neg_ql = quantile(negs, c(0.025, 0.975))
+  pos_ql = quantile(poss, c(0.025, 0.975))
+  hs_smm$count_pos_Up[i] = pos_ql[2]
+  hs_smm$count_pos_Low[i] = pos_ql[1]
+  hs_smm$count_neg_Up[i] = neg_ql[2]
+  hs_smm$count_neg_Low[i] = neg_ql[1]
+}
+write.table(hs_smm, file.path(data_out, 'hotspot_count_smm_bootstrap.txt'), sep='\t', quote = F, row.names = F)
+
+hs_smm_plt = hs_smm[!hs_smm$cancer %in% c('LUSC', 'LUAD', 'OV'),] %>% 
+                        gather(key='sign', value='Count', 2:3)
+hs_smm_plt$low = NA
+hs_smm_plt$up = NA
+for (i in 1:nrow(hs_smm_plt)){
+  if (hs_smm_plt$sign[i]=='count_pos'){
+    hs_smm_plt$low[i] = hs_smm_plt$count_pos_Low[i]
+    hs_smm_plt$up[i] = hs_smm_plt$count_pos_Up[i]
+  } else {
+    hs_smm_plt$low[i] = hs_smm_plt$count_neg_Low[i]
+    hs_smm_plt$up[i] = hs_smm_plt$count_neg_Up[i]
+  }
+}
+n_cancer = length(unique(hs_smm_plt$cancer))
+segm = data.frame(x1=seq(0.65,0.6+n_cancer,1), y1=rep(5,n_cancer), 
+                  x2=seq(0.65,0.6+n_cancer,1)+0.25, y2=rep(5,n_cancer))
+segm2 = data.frame(x1=seq(0.65+0.45,0.6+n_cancer,1), y1=rep(5,n_cancer), 
+                  x2=seq(0.65+0.45,0.6+n_cancer,1)+0.25, y2=rep(5,n_cancer))
+segm = rbind(segm, segm2)
+g = ggplot(hs_smm_plt,
            aes(x=cancer,y=Count/mutant_size)) +
   geom_bar(aes(fill=sign),stat='identity', position = 'dodge') +
+  geom_errorbar(aes(ymin=low/mutant_size, ymax=up/mutant_size, group=sign), width=0.5,
+                position = position_dodge(width = 0.9)) +
   scale_y_continuous(expand = expansion(mult = c(0,0.2))) +
-  geom_text(aes(label=paste(Count, mutant_size, sep='\n/'), group=sign), 
-            position = position_dodge(width=0.9), vjust=0.5, size=4) +
+  geom_text(aes(label=Count, group=sign, y=7), position = position_dodge(width=0.9), 
+            size=3.5, color='white') +
+  geom_text(aes(label=mutant_size, group=sign, y=3), position = position_dodge(width=0.9), 
+            size=3.5, color='white') +
   labs(x='', y='Gene count / Mutant sample size') + scale_fill_d3(name='',labels = c('Negative', 'Positive')) +
+  #annotate('text', y = -10, aes(label = as.character(Count))) +
+  # coord_cartesian(ylim = c(0, 80), clip = "off") +
   # geom_text(label=parse(text="'Not passing\nVAF filter'"), x='LUAD', y=2, size=2.5) +
+  geom_segment(data = segm, aes(x=x1, y=y1, xend=x2, yend=y2), color='white') +
   mytme + theme(legend.position = c(0.8,0.9))
+g
 ggsave(file.path(plot_out, 'panCan_count_overview.pdf'),
        plot=g, height=11.69*0.4,width=8.27*0.7,units='in',device='pdf',dpi=300)
 
@@ -237,8 +300,6 @@ ggsave(file.path(plot_out, 'BRCA', 'upset_noNS.pdf'),
 
 
 ### Enrichment analysis ====
-load('/Users/jefft/Desktop/p53_project/datasets/TCGA-Pan-Nine/gene_matrix.RData')
-mtx = as.data.frame(mtx)
 
 ## choose one background !!!
 bg = rownames(mtx)[which(mtx$BRCA==1)]
