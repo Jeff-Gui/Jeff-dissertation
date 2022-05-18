@@ -26,12 +26,12 @@ config_names = c('tcga_lusc.yaml', 'tcga_blca.yaml', 'tcga_ov.yaml', 'tcga_lgg.y
 
 for (config_name in config_names) {
   print(config_name)
-  refresh_log = TRUE
-  save_intermediate = FALSE  # may spend extra time
-  use_cache = TRUE # cached data (clean_data.RData)
-  use_cache_geno_pca = TRUE # cached genotype PCs
+  refresh_log = TRUE         # refresh log file in output dir
+  save_intermediate = FALSE  # output cache files to dataset homedir
+  use_cache = TRUE           # silence data preprocessing, use cached data (clean_data.RData)
+  use_cache_geno_pca = TRUE  # use cached genotype PCs
   source = TRUE
-  check_cna_wt = FALSE
+  check_cna_wt = FALSE       # check if the WT sample is copy-number normal - not used in dissertaiton. 
   
   ## Handle config
   default_cfg = yaml.load_file(file.path('config', default_cfg_name))

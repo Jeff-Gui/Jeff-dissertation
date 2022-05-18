@@ -1,26 +1,27 @@
-output: outputs/tcga_brca_raw_seq
+output: outputs/tcga_brca_raw_seq         # output folder under repository defined by default config (`default_vsWT.yaml` - experiment home)
 dataset:
     dataset_home: /Users/jefft/Desktop/p53_project/datasets/9-BRCA-TCGA/brca_tcga_pan_can_atlas_2018
-    has_log_ed: FALSE
-    exp_nm: data_mrna_seq_v2_rsem.txt
+    has_log_ed: FALSE                     # has data been log2 transformed?
+    exp_nm: data_mrna_seq_v2_rsem.txt     # file name of the RNAseq data
+    # NA string in omic data
     na.str: 
 
 preprocess:
-    quantile: FALSE
-    z_score: TRUE
-    rm_low_expr_gene: 1
-    diploid_norm: FALSE
+    quantile: FALSE             # (deprecated)
+    z_score: TRUE               # do inverse normal transform (INT), called z-score historical reason.
+    rm_low_expr_gene: 1         # filter out mean expression level lower than one. 
+    diploid_norm: FALSE         # (deprecated)
 
 eQTL:
-    genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv
+    genepos: /Users/jefft/Desktop/p53_project/scripts/eQTL/hg19_gene_table.tsv  # table to include only protein coding gene (genome version hg19)
     # covariate_from_meta: AGE,SEX,ANEUPLOIDY_SCORE
-    covariate_from_meta: AGE,SEX
-    covariate_code: GENO
+    covariate_from_meta: AGE,SEX                                                # covariates - column names from TCGA metadata
+    covariate_code: GENO                                                        # covariate - Top 5 genotype principal components 
     meta_mut: 
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/Walerych2016.txt     # proteaosomal paper mutation group
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot.txt         # hotspot mutations
 #     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/hot_spot_sub.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/ContactCore.txt
-     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/BRCA_UMD.txt
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/ContactCore.txt      # structural features (contact, conformational, sandwich)
+     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/BRCA_UMD.txt         # UMD tissue-specific mutation
 #     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/cons.txt
-#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt
+#     - /Users/jefft/Desktop/p53_project/datasets/meta_muts/pos.txt             # all positions in p53 DBD
